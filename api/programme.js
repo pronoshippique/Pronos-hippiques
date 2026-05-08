@@ -1,25 +1,25 @@
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  
   const today = new Date();
   const dd = String(today.getDate()).padStart(2,'0');
   const mm = String(today.getMonth()+1).padStart(2,'0');
   const yyyy = today.getFullYear();
-  
   try {
     const r = await fetch(
-      `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${yyyy}${mm}${dd}?metier=INTERNET`,
-      { headers: { 'Accept': 'application/json' } }
+      `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${yyyy}${mm}${dd}?metier=INTERNET&fields=ALL`,
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
     );
     const d = await r.json();
-    const reunions = (d.programme?.reunions || []).slice(0,7).map((r,i) => ({
+    // Log pour debug
+    const keys = Object.keys(d);
+    const reunionsRaw = d.programme?.reunions || d.reunions || d.listReunions || [];
+    const reunions = reunionsRaw.slice(0,7).map((r,i) => ({
       id: `R${i+1}`,
-      hippodrome: r.hippodrome?.nom || r.libelle || `R${i+1}`,
-      courses: (r.courses || []).slice(0,9).map((c,j) => ({
+      hippodrome: r.hippodrome?.nom || r.libelle || r.nom || `R${i+1}`,
+      courses: (r.courses||r.listCourses||[]).slice(0,9).map((c,j) => ({
         id:`C${j+1}`, ref:`R${i+1} C${j+1}`,
-        nom: c.libelle || `Course ${j+1}`,
-        type: c.discipline || 'Plat',
+        nom: c.libelle || c.nom || `Course ${j+1}`,
+        type: c.discipline || c.typePiste || 'Plat',
         dist: `${c.distance||1600}m`,
         part: c.nombreDeclaresPartants || 10,
         heure: c.heureDepart ? new Date(c.heureDepart).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}).replace(':','h') : '--h--',
@@ -28,8 +28,7 @@ export default async function handler(req, res) {
         partantsData: []
       }))
     })).filter(r => r.courses.length > 0);
-    
-    res.json({ success: true, reunions });
+    res.json({ success: true, reunions, debug: keys });
   } catch(e) {
     res.json({ success: false, error: e.message });
   }
