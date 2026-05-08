@@ -1,3 +1,4 @@
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const today = new Date();
@@ -6,20 +7,18 @@ export default async function handler(req, res) {
   const yyyy = today.getFullYear();
   try {
     const r = await fetch(
-      `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${yyyy}${mm}${dd}?metier=INTERNET&fields=ALL`,
-      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+      `https://turfinfo.api.pmu.fr/rest/client/2/programme/${yyyy}${mm}${dd}?specialisation=INTERNET`,
+      { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.pmu.fr' } }
     );
     const d = await r.json();
-    // Log pour debug
-    const keys = Object.keys(d);
-    const reunionsRaw = d.programme?.reunions || d.reunions || d.listReunions || [];
+    const reunionsRaw = d.programme?.reunions || [];
     const reunions = reunionsRaw.slice(0,7).map((r,i) => ({
-      id: `R${i+1}`,
-      hippodrome: r.hippodrome?.nom || r.libelle || r.nom || `R${i+1}`,
-      courses: (r.courses||r.listCourses||[]).slice(0,9).map((c,j) => ({
+      id:`R${i+1}`,
+      hippodrome: r.hippodrome?.nom || `R${i+1}`,
+      courses: (r.courses||[]).slice(0,9).map((c,j) => ({
         id:`C${j+1}`, ref:`R${i+1} C${j+1}`,
-        nom: c.libelle || c.nom || `Course ${j+1}`,
-        type: c.discipline || c.typePiste || 'Plat',
+        nom: c.libelle || `Course ${j+1}`,
+        type: c.discipline || 'Plat',
         dist: `${c.distance||1600}m`,
         part: c.nombreDeclaresPartants || 10,
         heure: c.heureDepart ? new Date(c.heureDepart).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}).replace(':','h') : '--h--',
@@ -28,7 +27,7 @@ export default async function handler(req, res) {
         partantsData: []
       }))
     })).filter(r => r.courses.length > 0);
-    res.json({ success: true, reunions, debug: keys });
+    res.json({ success: true, reunions, total: reunionsRaw.length });
   } catch(e) {
     res.json({ success: false, error: e.message });
   }
