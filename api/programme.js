@@ -1,32 +1,28 @@
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=1800');
-  const today = new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  res.setHeader('Cache-Control', 's-maxage=600');
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+    const r = await fetch('https://www.boturfers.fr/programme-pmu-du-jour', {
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: `Programme PMU du ${today}. JSON uniquement:\n[{"id":"R1","hippodrome":"Vincennes","courses":[{"id":"C1","ref":"R1 C1","nom":"Prix X","type":"Trot attelé","dist":"2175m","part":14,"heure":"13h15","terrain":"Bon","quinte":false}]}]`
-        }]
-      })
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'fr-FR,fr;q=0.9'
+      }
     });
-    const d = await r.json();
-    const txt = d.content.filter(b=>b.type==='text').map(b=>b.text).join('');
-    const match = txt.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('no data');
-    const reunions = JSON.parse(match[0]);
-    res.json({ success: true, reunions });
+    const html = await r.text();
+    // Chercher les reunions et courses dans le HTML
+    const reunions = [];
+    const hippoMatches = [...html.matchAll(/hippodrome[^>]*>([^<]{3,40})</gi)];
+    const courseMatches = [...html.matchAll(/Prix\s+[A-ZÀ-Ü][^<]{2,50}/g)];
+    const heureMatches = [...html.matchAll(/(\d{1,2}h\d{2})/g)];
+    res.json({
+      success: true,
+      hippos: [...new Set(hippoMatches.map(m=>m[1].trim()))].slice(0,10),
+      courses: courseMatches.map(m=>m[0].trim()).slice(0,20),
+      heures: heureMatches.map(m=>m[1]).slice(0,20),
+      size: html.length
+    });
   } catch(e) {
     res.json({ success: false, error: e.message });
   }
