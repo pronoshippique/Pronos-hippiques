@@ -12,6 +12,12 @@ export default async function handler(req, res) {
     });
     const html = await r.text();
 
+    // Détecter le nom de la course Quinté
+    const quinteMatch = html.match(/[Qq]uint[eé][^<"]{0,5}(?:d['']aujourd|du jour)?[^<"]*(?:course|Prix|R\d)[^<"]{0,50}/i);
+    const quinteRef = html.match(/R(\d)\s*C(\d)[^<"]{0,20}[Qq]uint/i);
+    const quinteR = quinteRef ? parseInt(quinteRef[1]) - 1 : 0;
+    const quinteC = quinteRef ? parseInt(quinteRef[2]) - 1 : 2;
+
     // Extraire hippodromes
     const hippos = [...new Set(
       [...html.matchAll(/l['']hippodrome\s+(?:de\s+)?([A-ZÀÂÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÉÈÊËÎÏÔÙÛÜ\s\-]+?)(?:\s+(?:qui|avec|est|de|accueille)|[,<"'])/gi)]
@@ -27,7 +33,6 @@ export default async function handler(req, res) {
     // Horaires
     const heures = [...new Set([...html.matchAll(/(\d{1,2}h\d{2})/g)].map(m=>m[1]))];
 
-    // Construire les réunions
     const reunions = [];
     const hipposUniques = [...new Set(hippos)].slice(0,6);
     const coursesUniques = [...new Set(prixMatches)].slice(0,40);
@@ -40,6 +45,7 @@ export default async function handler(req, res) {
       const nbCourses = Math.min(7, Math.max(4, Math.floor(coursesUniques.length / hipposUniques.length)));
       const courses = [];
       for (let ci = 0; ci < nbCourses && courseIndex < coursesUniques.length; ci++) {
+        const isQuinte = (ri === quinteR && ci === quinteC);
         courses.push({
           id: `C${ci+1}`,
           ref: `R${ri+1} C${ci+1}`,
@@ -49,7 +55,7 @@ export default async function handler(req, res) {
           part: 10,
           heure: heuresUniques[heureIndex++] || '--h--',
           terrain: 'Bon',
-          quinte: ci === 0 && ri === 0,
+          quinte: isQuinte,
           partantsData: []
         });
       }
