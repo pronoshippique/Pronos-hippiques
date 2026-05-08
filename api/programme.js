@@ -1,35 +1,36 @@
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=300');
+  
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2,'0');
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const yyyy = today.getFullYear();
+  
   try {
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2,'0');
-    const mm = String(today.getMonth()+1).padStart(2,'0');
-    const yyyy = today.getFullYear();
-    const url = `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${yyyy}${mm}${dd}?metier=INTERNET&fields=ALL`;
-    const pmu = await fetch(url, {headers:{'Accept':'application/json','User-Agent':'Mozilla/5.0'}});
-    if (!pmu.ok) throw new Error('PMU error');
-    const data = await pmu.json();
-    const reunions = [];
-    (data.programme?.reunions || []).forEach((r,ri) => {
-      if (ri >= 8) return;
-      const rid = `R${r.numOfficiel||ri+1}`;
-      const courses = [];
-      (r.courses||[]).forEach((c,ci) => {
-        if (ci >= 10) return;
-        let heure = '--h--';
-        if (c.heureDepart) {
-          const d = new Date(c.heureDepart);
-          heure = `${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
-        }
-        courses.push({
-          id:`C${c.numOrdre||ci+1}`,
-          ref:`${rid} C${c.numOrdre||ci+1}`,
-          nom:c.libelle||`Course ${ci+1}`,
-          type:c.discipline||'Plat',
-          dist:c.distance?`${c.distance}m`:'?m',
-          part:c.nombreDeclaresPartants||(c.partants||[]).length||10,
-          heure,
-          terrain:c.conditionsPiste||'Bon',
-          quinte:c.categorieStatut==='QUINTE_PLUS',
-          partan
+    const r = await fetch(
+      `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${yyyy}${mm}${dd}?metier=INTERNET`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    const d = await r.json();
+    const reunions = (d.programme?.reunions || []).slice(0,7).map((r,i) => ({
+      id: `R${i+1}`,
+      hippodrome: r.hippodrome?.nom || r.libelle || `R${i+1}`,
+      courses: (r.courses || []).slice(0,9).map((c,j) => ({
+        id:`C${j+1}`, ref:`R${i+1} C${j+1}`,
+        nom: c.libelle || `Course ${j+1}`,
+        type: c.discipline || 'Plat',
+        dist: `${c.distance||1600}m`,
+        part: c.nombreDeclaresPartants || 10,
+        heure: c.heureDepart ? new Date(c.heureDepart).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}).replace(':','h') : '--h--',
+        terrain: c.conditionsPiste || 'Bon',
+        quinte: c.categorieStatut === 'QUINTE_PLUS',
+        partantsData: []
+      }))
+    })).filter(r => r.courses.length > 0);
+    
+    res.json({ success: true, reunions });
+  } catch(e) {
+    res.json({ success: false, error: e.message });
+  }
+}
