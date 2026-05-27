@@ -334,11 +334,11 @@ nav {
   </svg>
   <div style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;margin-bottom:12px;">Votre essai gratuit est terminé</div>
   <div style="font-family:'Crimson Pro',serif;font-size:1.1rem;color:var(--cream-dim);max-width:420px;line-height:1.7;margin-bottom:36px;">
-    Vous avez profité de 2 jours d'accès gratuit à tous nos pronostics hippiques générés par IA. Continuez à recevoir les meilleures sélections chaque jour pour seulement 10€/mois.
+    Vous avez profité de 2 jours d'accès gratuit à tous nos pronostics hippiques générés par IA. Continuez à recevoir les meilleures sélections chaque jour pour seulement 9,90€/mois.
   </div>
   <div style="background:var(--dark-3);border:1px solid var(--gold);padding:32px 40px;max-width:380px;width:100%;margin-bottom:24px;">
     <div style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Abonnement complet</div>
-    <div style="font-family:'Playfair Display',serif;font-size:3.5rem;font-weight:900;color:var(--gold);line-height:1;">10€</div>
+    <div style="font-family:'Playfair Display',serif;font-size:3.5rem;font-weight:900;color:var(--gold);line-height:1;">9,90€</div>
     <div style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--cream-dim);margin-bottom:20px;letter-spacing:0.1em;">PAR MOIS · SANS ENGAGEMENT</div>
     <ul style="list-style:none;text-align:left;margin-bottom:24px;display:flex;flex-direction:column;gap:10px;">
       <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Toutes les courses PMU du jour</li>
@@ -511,7 +511,7 @@ function getTrialDaysLeft() {
 }
 
 function activateSubscription() {
-  alert('Redirection vers le paiement Stripe...\n\n10€/mois — Sans engagement\nPaiement sécurisé SSL');
+  alert('Redirection vers le paiement Stripe...\n\n9,90€/mois — Sans engagement\nPaiement sécurisé SSL');
   localStorage.setItem('ph_subscribed', 'true');
   location.reload();
 }
@@ -531,7 +531,7 @@ function updateTrialBanner() {
         ⏳ Essai gratuit — Il vous reste <strong>${getTrialDaysLeft()}</strong>
       </span>
       <button onclick="activateSubscription()" style="background:var(--gold);color:var(--dark);border:none;padding:5px 14px;font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.1em;cursor:pointer;font-weight:600;">
-        S'abonner — 10€/mois
+        S'abonner — 9,90€/mois
       </button>`;
   } else {
     banner.style.display = 'none';
@@ -871,7 +871,7 @@ function filterCourses(q) {
 
 // ── SUBSCRIBER INFO ──
 function showSubscriberInfo() {
-  alert('✅ Abonnement actif\n\n📅 Renouvellement : le 8 de chaque mois\n💳 10€/mois — Stripe sécurisé\n\nPour gérer votre abonnement, contactez le support.');
+  alert('✅ Abonnement actif\n\n📅 Renouvellement : le 8 de chaque mois\n💳 9,90€/mois — Stripe sécurisé\n\nPour gérer votre abonnement, contactez le support.');
 }
 
 // ── FALLBACK ──
