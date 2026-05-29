@@ -288,6 +288,32 @@ nav {
 .loading-step.done { color:var(--green-light); }
 .loading-step.active { color:var(--gold); }
 
+/* COURSE DESCRIPTIF */
+.course-descriptif { margin-bottom:24px; }
+.course-fiche-card { background:var(--dark-3); border:1px solid var(--border); border-left:4px solid var(--gold); padding:18px 22px; margin-bottom:20px; }
+.course-fiche-title { font-family:'Playfair Display',serif; font-size:1.15rem; font-weight:700; color:var(--cream); margin-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.course-fiche-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.course-fiche-chip { font-family:'DM Mono',monospace; font-size:0.56rem; letter-spacing:0.08em; text-transform:uppercase; padding:3px 10px; background:var(--dark-4); border:1px solid var(--border); color:var(--cream-dim); }
+.course-fiche-chip.hl { border-color:rgba(201,168,76,0.4); color:var(--gold); }
+.course-fiche-intro { font-size:0.87rem; color:var(--cream-dim); line-height:1.7; font-style:italic; }
+
+/* PARTANTS PREVIEW */
+.partants-preview-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:8px; margin-top:12px; margin-bottom:28px; }
+.partant-card { background:var(--dark-3); border:1px solid var(--border); padding:10px 12px; display:flex; flex-direction:column; gap:3px; transition:border-color 0.15s; }
+.partant-card:hover { border-color:rgba(201,168,76,0.3); }
+.partant-card.np { opacity:0.4; border-style:dashed; }
+.partant-card-head { display:flex; align-items:center; gap:8px; }
+.partant-card-num { font-family:'DM Mono',monospace; font-size:0.82rem; font-weight:700; color:var(--gold); width:22px; flex-shrink:0; }
+.partant-card-nom { font-size:0.8rem; font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.partant-card-driver { font-family:'DM Mono',monospace; font-size:0.55rem; color:var(--cream-dim); letter-spacing:0.03em; margin-top:1px; }
+.partant-card-meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:2px; }
+.partant-card-age { font-family:'DM Mono',monospace; font-size:0.5rem; color:var(--cream-dim); }
+.partant-card-cote { font-family:'DM Mono',monospace; font-size:0.56rem; color:var(--green-light); font-weight:700; }
+.partant-card-cote.pmu { color:var(--gold); }
+.partant-skeleton { background:var(--dark-4); border-radius:1px; }
+@keyframes sk-pulse { 0%,100%{opacity:0.35} 50%{opacity:0.7} }
+.partant-skeleton { animation:sk-pulse 1.3s ease-in-out infinite; }
+
 /* PALMARES */
 .palmares-block { background:var(--dark-3); border:1px solid var(--border); margin-bottom:28px; overflow:hidden; }
 .palmares-row { display:flex; align-items:center; gap:16px; padding:11px 18px; border-bottom:1px solid rgba(201,168,76,0.08); }
@@ -326,6 +352,7 @@ html[dir="rtl"] .course-item.active { border-right-color:var(--gold); }
 html[dir="rtl"] .analyse-card { border-left:none; border-right:3px solid var(--gold); }
 html[dir="rtl"] .conditions-card { border-left:none; border-right:3px solid var(--green-light); }
 html[dir="rtl"] .reco-card { border-left:none; border-right:4px solid var(--gold); }
+html[dir="rtl"] .course-fiche-card { border-left:none; border-right:4px solid var(--gold); }
 html[dir="rtl"] .modal-close { right:auto; left:18px; }
 html[dir="rtl"] .search-icon { left:auto; right:10px; }
 html[dir="rtl"] .search-input { padding:9px 32px 9px 12px; }
@@ -521,6 +548,17 @@ html[dir="rtl"] .search-input { padding:9px 32px 9px 12px; }
 
       <div id="quinteBadge" style="display:none;">
         <div class="quinte-badge-full" data-i18n="main.quinteAnalysis">★ Quinté+ du Jour — Analyse Prioritaire</div>
+      </div>
+
+      <!-- Descriptif immédiat (sans attendre l'IA) -->
+      <div class="course-descriptif" id="courseDescriptif" style="display:none;">
+        <div class="course-fiche-card">
+          <div class="course-fiche-title" id="courseFicheTitle"></div>
+          <div class="course-fiche-chips" id="courseFicheChips"></div>
+          <div class="course-fiche-intro" id="courseFicheIntro"></div>
+        </div>
+        <div class="block-label" style="margin-bottom:0;" id="partantsPreviewLabel">Partants</div>
+        <div class="partants-preview-grid" id="partantsPreviewGrid"></div>
       </div>
 
       <div class="loading-wrap" id="loadingWrap" style="display:none;">
@@ -1385,7 +1423,7 @@ function buildNav() {
 }
 
 // ── SELECT COURSE ──
-function selectCourse(rid, cid) {
+async function selectCourse(rid, cid) {
   document.querySelectorAll('.course-item').forEach(el => el.classList.remove('active'));
   const el = document.getElementById(`ci-${rid}-${cid}`);
   if (el) el.classList.add('active');
@@ -1409,21 +1447,122 @@ function selectCourse(rid, cid) {
   ].map(m => `<div class="meta-chip">${m}</div>`).join('');
   document.getElementById('quinteBadge').style.display = course.quinte ? 'block' : 'none';
 
+  // Affiche immédiatement la fiche course + squelette partants
+  showCourseFiche(course, reunion);
+
   const key = rid + '-' + cid;
   if (cache[key]) {
+    // Cache hit : charge les partants pour le descriptif sans bloquer
+    loadPartantsPreview(course);
     render(cache[key], course.quinte);
   } else {
     document.getElementById('pronoBlock').classList.remove('active');
+    document.getElementById('loadingWrap').style.display = 'none';
+    // Charge les partants + cotes pour le descriptif, puis lance l'IA
+    await loadPartantsPreview(course);
     document.getElementById('loadingWrap').style.display = 'flex';
     generate(course, key);
   }
+}
+
+// ── FICHE COURSE IMMÉDIATE ──
+function showCourseFiche(course, reunion) {
+  const el = document.getElementById('courseDescriptif');
+  if (!el) return;
+  el.style.display = 'block';
+
+  const isQ = course.quinte;
+  const hippo = reunion.hippodrome || reunion.hipp || '';
+
+  document.getElementById('courseFicheTitle').innerHTML =
+    `${course.nom}${isQ ? ' <span style="color:var(--gold);font-size:0.85rem;">★ QUINTÉ+</span>' : ''}`;
+
+  const chips = [
+    `<span class="course-fiche-chip hl">${hippo}</span>`,
+    course.heure ? `<span class="course-fiche-chip hl">🕐 ${course.heure}</span>` : '',
+    course.type  ? `<span class="course-fiche-chip">${course.type}</span>` : '',
+    course.dist  ? `<span class="course-fiche-chip">${course.dist}</span>` : '',
+    course.terrain ? `<span class="course-fiche-chip">Terrain : ${course.terrain}</span>` : '',
+    course.part  ? `<span class="course-fiche-chip">${course.part} partants</span>` : '',
+    (reunion.pays && reunion.pays !== 'France') ? `<span class="course-fiche-chip">${reunion.pays}</span>` : '',
+  ].filter(Boolean).join('');
+  document.getElementById('courseFicheChips').innerHTML = chips;
+
+  const disc = (course.type || 'course').toLowerCase();
+  document.getElementById('courseFicheIntro').textContent =
+    `Cette ${disc} sur ${course.dist || '?'} à ${hippo} oppose ${course.part || '?'} partants`
+    + (course.terrain ? ` sur terrain ${course.terrain.toLowerCase()}` : '')
+    + (isQ ? '. Course Quinté+ du jour.' : '.');
+
+  // Squelette en attendant les vrais partants
+  document.getElementById('partantsPreviewLabel').textContent = `Partants (${course.part || '?'})`;
+  const grid = document.getElementById('partantsPreviewGrid');
+  grid.innerHTML = Array(Math.min(course.part || 10, 18)).fill(0).map(() =>
+    `<div class="partant-card">
+      <div class="partant-skeleton" style="height:13px;width:80%;margin-bottom:6px;"></div>
+      <div class="partant-skeleton" style="height:10px;width:55%;"></div>
+    </div>`
+  ).join('');
+}
+
+// ── CHARGEMENT PARTANTS POUR LE DESCRIPTIF ──
+async function loadPartantsPreview(course) {
+  const grid = document.getElementById('partantsPreviewGrid');
+  if (!grid) return;
+
+  // Fetch partants si pas encore chargés
+  if (!course.partantsData?.length && course.numReunion && course.numCourse && course.dateStr) {
+    try {
+      const r = await fetch(`/api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
+      const d = await r.json();
+      if (d.success && d.participants?.length) course.partantsData = d.participants;
+    } catch(e) {}
+  }
+
+  // Fetch cotes en parallèle si pas encore chargées
+  if (!course.cotesData && course.numReunion && course.numCourse && course.dateStr) {
+    try {
+      const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
+      const d = await r.json();
+      course.cotesData = d.success ? (d.cotes || {}) : {};
+    } catch(e) { course.cotesData = {}; }
+  }
+
+  const partants = course.partantsData || [];
+  const cotes = course.cotesData || {};
+
+  if (!partants.length) {
+    grid.innerHTML = `<div style="color:var(--cream-dim);font-size:0.8rem;padding:12px 0;">Données PMU non disponibles</div>`;
+    return;
+  }
+
+  grid.innerHTML = partants.map(p => {
+    const cote = cotes[p.numPmu];
+    const np = p.nonPartant;
+    const coteHtml = cote
+      ? `<span class="partant-card-cote pmu">★ ${cote}</span>`
+      : (p.indiceCote ? `<span class="partant-card-cote">~ ${(p.indiceCote/10).toFixed(1)}</span>` : '');
+    const npTag = np ? `<span style="font-family:'DM Mono',monospace;font-size:0.48rem;color:#C43030;letter-spacing:0.05em;">NP</span>` : '';
+    return `<div class="partant-card${np?' np':''}">
+      <div class="partant-card-head">
+        <span class="partant-card-num">${p.numPmu}</span>
+        <span class="partant-card-nom" title="${p.nom}">${p.nom}</span>
+      </div>
+      ${p.driver ? `<div class="partant-card-driver">👤 ${p.driver}</div>` : ''}
+      <div class="partant-card-meta">
+        ${p.age ? `<span class="partant-card-age">${p.age} ans${p.sexe ? ' · '+p.sexe : ''}</span>` : ''}
+        ${coteHtml}${npTag}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── GÉNÉRATION PRONOSTICS IA ──
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
-  updateLoadingText('⟳ Agent 1 — Partants PMU...');
+  const alreadyLoaded = !!(course.partantsData?.length);
+  updateLoadingText(alreadyLoaded ? '⟳ Agent 2 — Historiques & IA...' : '⟳ Agent 1 — Partants PMU...');
   clearLoadingSteps();
 
   // Fetch real participants from PMU via proxy
