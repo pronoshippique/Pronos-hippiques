@@ -604,6 +604,7 @@ const i18n = {
     'main.quinteLabel':'Quinté dans l\'ordre',
     'main.conditionsLabel':'Conditions du jour',
     'reports.couple':'Couplé',
+    'reports.2sur4':'2 sur 4',
     'reports.quarte':'Quarté',
     'main.coteLive':'Cote PMU',
     'main.coteIA':'Cote IA'
@@ -680,6 +681,7 @@ const i18n = {
     'main.quinteLabel':'Quintet in order',
     'main.conditionsLabel':'Today\'s conditions',
     'reports.couple':'Exacta',
+    'reports.2sur4':'2 out of 4',
     'reports.quarte':'Quartet',
     'main.coteLive':'PMU Odds',
     'main.coteIA':'AI Odds'
@@ -756,6 +758,7 @@ const i18n = {
     'main.quinteLabel':'Quinteto en orden',
     'main.conditionsLabel':'Condiciones del día',
     'reports.couple':'Pareja',
+    'reports.2sur4':'2 de 4',
     'reports.quarte':'Cuarteto',
     'main.coteLive':'Cuota PMU',
     'main.coteIA':'Cuota IA'
@@ -832,6 +835,7 @@ const i18n = {
     'main.quinteLabel':'Quintett in Reihenfolge',
     'main.conditionsLabel':'Heutige Bedingungen',
     'reports.couple':'Paar',
+    'reports.2sur4':'2 aus 4',
     'reports.quarte':'Quartett',
     'main.coteLive':'PMU-Quote',
     'main.coteIA':'KI-Quote'
@@ -908,6 +912,7 @@ const i18n = {
     'main.quinteLabel':'Quintetto in ordine',
     'main.conditionsLabel':'Condizioni del giorno',
     'reports.couple':'Accoppiata',
+    'reports.2sur4':'2 su 4',
     'reports.quarte':'Quartetto',
     'main.coteLive':'Quota PMU',
     'main.coteIA':'Quota IA'
@@ -984,6 +989,7 @@ const i18n = {
     'main.quinteLabel':'الخماسي بالترتيب',
     'main.conditionsLabel':'ظروف اليوم',
     'reports.couple':'الثنائي',
+    'reports.2sur4':'2 من 4',
     'reports.quarte':'الرباعي',
     'main.coteLive':'حصة PMU',
     'main.coteIA':'حصة الذكاء'
@@ -1060,6 +1066,7 @@ const i18n = {
     'main.quinteLabel':'Sıralı Beşli',
     'main.conditionsLabel':'Bugünün Koşulları',
     'reports.couple':'İkili',
+    'reports.2sur4':'4\'ten 2',
     'reports.quarte':'Dörtlü',
     'main.coteLive':'PMU Oranı',
     'main.coteIA':'YZ Oranı'
@@ -1461,7 +1468,8 @@ async function generate(course, key) {
     : '';
 
   const quinteFields = isQ ? `"quinte":[7,3,1,9,5],` : '';
-  const quinteRapports = isQ ? `,"quinte":"180x","quinte_ordre":"2500x"` : '';
+  const deuxSur4 = n >= 10 ? `,"2_sur_4":"8x"` : '';
+  const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
   const carriereNote = hasCarriere
     ? '\nHistorique des 5 dernières courses fourni pour chaque cheval. Analyse les performances passées (positions, terrain, distance, discipline) pour évaluer la forme réelle.'
     : '';
@@ -1475,7 +1483,7 @@ ${infoPartants}
 ${carriereNote}${langNote}
 
 Réponds UNIQUEMENT avec ce JSON valide (rien avant, rien après) :
-{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"7.5","analyse":"Analyse basée sur historique réel: forme, terrain, distance. 1-2 phrases.","confiance":75}],"classement":[7,3,1,9,5],"couple":[7,3],"quarte":[7,3,1,9],${quinteFields}"rapports":{"gagnant":"4.2x","place":"1.8x","couple":"12x","quarte":"85x"${quinteRapports}},"analyse":"Analyse générale 2-3 phrases basée sur les données.","conditions":"Commentaire terrain/distance/discipline 1-2 phrases."}
+{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"7.5","analyse":"Analyse basée sur historique réel: forme, terrain, distance. 1-2 phrases.","confiance":75}],"classement":[7,3,1,9,5],"couple":[7,3],${quinteFields}"rapports":{"gagnant":"4.2x","place":"1.8x","couple":"12x"${deuxSur4}${quinteRapports}},"analyse":"Analyse générale 2-3 phrases basée sur les données.","conditions":"Commentaire terrain/distance/discipline 1-2 phrases."}
 
 RÈGLES STRICTES:
 - selection: TOUS les partants dans l'ordre des numéros de dossard (inclure non-partants avec non_partant:true, confiance:0)
@@ -1484,7 +1492,8 @@ RÈGLES STRICTES:
 - cote: utilise la cote PMU si fournie, sinon estime
 - favori:true pour le meilleur potentiel seulement
 - classement: top 5 numéros du plus probable au moins probable (non-partants exclus)
-- couple: [1er, 2ème] — quarte: [1er…4ème]${isQ ? ' — quinte: [1er…5ème]' : ''}
+- couple: [1er, 2ème]${isQ ? ' — quinte: [1er…5ème]' : ''}
+- rapports: gagnant + placé + couplé${n >= 10 ? ' + 2_sur_4' : ''}${isQ ? ' + quarte + quinte + quinte_ordre' : ''} (valeurs estimées)
 - rapports: gains estimés réalistes selon le nombre de partants
 - JSON VALIDE UNIQUEMENT, pas de commentaires`;
 
@@ -1515,13 +1524,62 @@ RÈGLES STRICTES:
     }
     if (!result) throw new Error("JSON non parseable");
 
-    // Merge real PMU cotes into selection
-    if (Object.keys(cotes).length) {
-      result.selection = result.selection.map(h => ({
+    // ── Fix 1: re-anchor selection to real PMU participant data ──
+    // Prevents AI from mismatching dossard numbers with jockeys/names
+    if (partantsReels.length > 0) {
+      const aiByNum = {};
+      for (const h of (result.selection || [])) aiByNum[h.num] = h;
+
+      const allPart = [...partantsReels, ...nonPartantsReels];
+      result.selection = allPart.map(p => {
+        const ai = aiByNum[p.numPmu] || {};
+        return {
+          num: p.numPmu,
+          nom: p.nom,
+          jockey: p.driver || ai.jockey || '',
+          age: p.age ? `${p.age} ans` : (ai.age || ''),
+          favori: ai.favori || false,
+          non_partant: p.nonPartant,
+          // Fix 2: PMU cote first, then AI-estimated cote
+          cote: ai.cote || null,
+          cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
+          analyse: ai.analyse || null,
+          confiance: p.nonPartant ? 0 : (ai.confiance || null),
+        };
+      });
+
+      // Exactly one favori (highest confiance among active runners)
+      const actifs = result.selection.filter(h => !h.non_partant);
+      const favoris = actifs.filter(h => h.favori);
+      if (favoris.length === 0 && actifs.length > 0) {
+        const best = actifs.reduce((a, b) => ((b.confiance||0) > (a.confiance||0) ? b : a));
+        best.favori = true;
+      } else if (favoris.length > 1) {
+        const maxC = Math.max(...favoris.map(h => h.confiance||0));
+        favoris.forEach(h => { if ((h.confiance||0) < maxC) h.favori = false; });
+      }
+    } else if (Object.keys(cotes).length) {
+      // No real participants, still merge PMU cotes
+      result.selection = (result.selection || []).map(h => ({
         ...h,
         cotePmu: cotes[h.num] ? String(cotes[h.num]) : null
       }));
     }
+
+    // ── Fix 3: enforce correct rapport types by course rules ──
+    const aiR = result.rapports || {};
+    const newRapports = {
+      gagnant: aiR.gagnant || '4.2x',
+      place:   aiR.place   || '1.8x',
+      couple:  aiR.couple  || '12x',
+    };
+    if (n >= 10) newRapports['2_sur_4'] = aiR['2_sur_4'] || aiR['2sur4'] || '8x';
+    if (isQ) {
+      newRapports.quarte       = aiR.quarte       || '85x';
+      newRapports.quinte       = aiR.quinte       || '180x';
+      newRapports.quinte_ordre = aiR.quinte_ordre || '2500x';
+    }
+    result.rapports = newRapports;
 
     cache[key] = result;
     render(result, isQ);
@@ -1616,7 +1674,7 @@ function render(data, isQ) {
   if (couple.length >= 2) palRows.push(`<div class="palmares-row">
     <span class="palmares-type">${t('main.coupleLabel')}</span>
     <div class="palmares-nums">${joinNums(couple.slice(0,2))}</div></div>`);
-  if (quarte.length >= 4) palRows.push(`<div class="palmares-row">
+  if (isQ && quarte.length >= 4) palRows.push(`<div class="palmares-row">
     <span class="palmares-type">${t('main.quarteLabel')}</span>
     <div class="palmares-nums">${joinNums(quarte.slice(0,4))}</div></div>`);
   if (isQ && quinte.length >= 5) palRows.push(`<div class="palmares-row">
@@ -1631,12 +1689,13 @@ function render(data, isQ) {
   // ── Rapports grid ──
   const entries = Object.entries(data.rapports);
   const labels = {
-    gagnant: t('reports.winner'),
-    place: t('reports.place'),
-    couple: t('reports.couple'),
-    quarte: t('reports.quarte'),
-    quinte: t('reports.quinte'),
-    quinte_ordre: t('reports.quinteOrder')
+    gagnant:     t('reports.winner'),
+    place:       t('reports.place'),
+    couple:      t('reports.couple'),
+    '2_sur_4':   t('reports.2sur4'),
+    quarte:      t('reports.quarte'),
+    quinte:      t('reports.quinte'),
+    quinte_ordre:t('reports.quinteOrder')
   };
   const grid = document.getElementById('rapportsGrid');
   grid.className = 'rapports-grid ' + (entries.length <= 2 ? 'r2' : entries.length >= 6 ? 'r6' : 'r4');
@@ -1722,11 +1781,12 @@ function fallback(n, isQ, partantsData, cotesData) {
   const quarte = shuffled.slice(0, 4);
   const quinte = shuffled.slice(0, 5);
 
-  const rapports = {gagnant:"4.2x", place:"1.8x", couple:"12x", quarte:"85x"};
-  if (isQ) { rapports.quinte="180x"; rapports.quinte_ordre="2500x"; }
+  const rapports = {gagnant:"4.2x", place:"1.8x", couple:"12x"};
+  if (n >= 10) rapports['2_sur_4'] = '8x';
+  if (isQ) { rapports.quarte="85x"; rapports.quinte="180x"; rapports.quinte_ordre="2500x"; }
   return {
-    selection: sel, classement, couple, quarte,
-    ...(isQ ? {quinte} : {}),
+    selection: sel, classement, couple,
+    ...(isQ ? {quarte, quinte} : {}),
     rapports, analyse: t('fallback.analyse'), conditions: null
   };
 }
