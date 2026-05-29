@@ -1479,11 +1479,13 @@ async function generate(course, key) {
   };
 
   const buildPartantLine = p => {
-    const cotePmu = cotes[p.numPmu] ? ` — Cote PMU: ${cotes[p.numPmu]}` : '';
-    const driver = p.driver ? ` — Jockey/Driver: ${p.driver}` : '';
-    const musique = p.musique ? ` — Musique: ${p.musique}` : '';
+    const cotePmu = cotes[p.numPmu] ? ` | Cote PMU: ${cotes[p.numPmu]}` : '';
+    const driver = p.driver ? ` | Jockey/Driver: ${p.driver}` : '';
+    const age = p.age ? ` | Âge: ${p.age} ans` : '';
+    const sexe = p.sexe ? ` | Sexe: ${p.sexe}` : '';
+    const musique = p.musique ? ` | Musique: ${p.musique}` : '';
     const hist = buildCarriereResume(p);
-    return `N°${p.numPmu} ${p.nom}${driver}${musique}${cotePmu}${hist}`;
+    return `N°${p.numPmu} ${p.nom}${driver}${age}${sexe}${musique}${cotePmu}${hist}`;
   };
 
   const hasCarriere = Object.keys(carriere).length > 0;
@@ -1506,12 +1508,29 @@ async function generate(course, key) {
   const deuxSur4Rapport = n >= 10 ? `,"2_sur_4":"8x"` : '';
   const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
 
-  const systemPrompt = `Tu es un expert hippique professionnel avec 20 ans d'expérience en analyse des courses PMU. Tu analyses les courses de manière détaillée et précise. Pour chaque cheval tu donnes sa forme récente chiffrée, l'analyse du jockey, l'adéquation terrain/distance, un avis tranché. Tu donnes des pronostics clairs et argumentés comme un vrai consultant hippique. Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
+  const systemPrompt = `Tu es Henri Blanc, expert hippique professionnel avec 25 ans d'expérience comme consultant pour les plus grands haras de France. Tu analyses chaque course avec rigueur et précision.
+
+Pour chaque cheval tu DOIS fournir :
+- Son numéro de dossard et son nom exact
+- Une analyse de sa forme récente : "A gagné ses 2 dernières sorties sur terrain souple" ou "N'a pas gagné depuis 3 mois, forme déclinante"
+- L'analyse du jockey/driver : "Raffin est le meilleur driver du moment, 28% de victoires ce mois"
+- L'adéquation avec les conditions : distance, terrain, discipline
+- Un verdict clair : FAVORI / OUTSIDER DANGEREUX / À ÉVITER
+
+Tu DOIS donner des pronostics COHÉRENTS et ARGUMENTÉS :
+- Le favori doit avoir les meilleures chances réelles
+- Les outsiders doivent avoir des arguments précis
+- Tes 5 premiers doivent être dans un ordre logique et justifié
+- Tes sélections Gagnant/Couplé/Quarté/Quinté doivent être cohérentes entre elles
+
+INTERDIT : donner des pronostics au hasard ou sans arguments.
+
+Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
 
   const prompt = `Analyse experte de cette course PMU:
 
 COURSE: ${course.nom}
-Type: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain}${isQ ? ' | ⭐ QUINTÉ+' : ''}
+Discipline: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain} | Partants: ${n}${isQ ? ' | ⭐ QUINTÉ+' : ''}
 
 ${infoPartants}
 ${langNote}
