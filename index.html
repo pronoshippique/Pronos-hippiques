@@ -34,7 +34,7 @@ nav {
 .logo { display:flex; align-items:center; gap:10px; }
 .logo-text { font-family:'Playfair Display',serif; font-size:1.25rem; font-weight:900; color:var(--gold); }
 .logo-text span { color:var(--cream); font-weight:400; }
-.nav-right { display:flex; align-items:center; gap:16px; }
+.nav-right { display:flex; align-items:center; gap:12px; }
 .ai-pill {
   display:flex; align-items:center; gap:7px;
   font-family:'DM Mono',monospace; font-size:0.62rem; color:var(--green-light); letter-spacing:0.1em;
@@ -48,6 +48,33 @@ nav {
   letter-spacing:0.1em; cursor:pointer; transition:all 0.2s;
 }
 .btn-nav:hover { border-color:var(--gold); color:var(--gold); }
+
+/* ── LANG SELECTOR ── */
+.lang-selector { position:relative; }
+.lang-btn {
+  background:none; border:1px solid var(--border); color:var(--cream-dim);
+  padding:6px 10px; font-family:'DM Mono',monospace; font-size:0.65rem;
+  letter-spacing:0.06em; cursor:pointer; transition:all 0.2s;
+  display:flex; align-items:center; gap:5px; height:100%;
+}
+.lang-btn:hover { border-color:var(--gold); color:var(--gold); }
+.lang-caret { font-size:0.45rem; opacity:0.6; transition:transform 0.2s; }
+.lang-selector.open .lang-caret { transform:rotate(180deg); }
+.lang-dropdown {
+  display:none; position:absolute; top:calc(100% + 8px); right:0;
+  background:var(--dark-2); border:1px solid var(--border);
+  z-index:400; min-width:148px; box-shadow:0 8px 28px rgba(0,0,0,0.55);
+}
+.lang-selector.open .lang-dropdown { display:block; }
+.lang-option {
+  display:flex; align-items:center; gap:9px;
+  padding:9px 14px; cursor:pointer;
+  font-family:'DM Mono',monospace; font-size:0.63rem;
+  letter-spacing:0.04em; transition:background 0.15s;
+  color:var(--cream-dim); white-space:nowrap;
+}
+.lang-option:hover { background:var(--dark-3); color:var(--cream); }
+.lang-option.active { color:var(--gold); }
 
 /* ── ENCART PUB ── */
 .ad-banner {
@@ -244,6 +271,18 @@ nav {
 .faq-item.open .faq-a { display:block; }
 .faq-item.open .faq-arrow { transform:rotate(180deg); }
 
+/* ── RTL SUPPORT ── */
+html[dir="rtl"] .sidebar { left:auto; right:0; border-right:none; border-left:1px solid var(--border); }
+html[dir="rtl"] .main { margin-left:0; margin-right:280px; }
+html[dir="rtl"] .lang-dropdown { right:auto; left:0; }
+html[dir="rtl"] .horse-card::before { left:auto; right:0; }
+html[dir="rtl"] .course-item { border-left:none; border-right:3px solid transparent; }
+html[dir="rtl"] .course-item.active { border-right-color:var(--gold); }
+html[dir="rtl"] .analyse-card { border-left:none; border-right:3px solid var(--gold); }
+html[dir="rtl"] .modal-close { right:auto; left:18px; }
+html[dir="rtl"] .search-icon { left:auto; right:10px; }
+html[dir="rtl"] .search-input { padding:9px 32px 9px 12px; }
+
 @media(max-width:768px){
   .sidebar{width:100%;height:auto;position:static;border-right:none;border-bottom:1px solid var(--border);}
   .app{flex-direction:column;}
@@ -253,6 +292,8 @@ nav {
   .ad-banner{height:44px;}
   .app{padding-top:104px;}
   .sidebar{top:104px;}
+  html[dir="rtl"] .sidebar { right:0; left:0; border-left:none; }
+  html[dir="rtl"] .main { margin-right:0; }
 }
 </style>
 </head>
@@ -265,10 +306,29 @@ nav {
     <div class="logo-text">Pronos<span> Hippiques</span></div>
   </div>
   <div class="nav-right">
-    <div class="ai-pill"><div class="ai-dot"></div>Agent IA actif</div>
+    <div class="ai-pill"><div class="ai-dot"></div><span data-i18n="nav.aiPill">Agent IA actif</span></div>
     <div class="nav-date" id="navDate"></div>
-    <button class="btn-nav" onclick="document.getElementById('faqModal').classList.add('open')">FAQ</button>
-    <button class="btn-nav" style="background:var(--gold);color:var(--dark);border-color:var(--gold);" onclick="showSubscriberInfo()">⭐ Abonné</button>
+
+    <!-- SÉLECTEUR DE LANGUE -->
+    <div class="lang-selector" id="langSelector">
+      <button class="lang-btn" onclick="toggleLangDropdown(event)">
+        <span id="langFlag">🇫🇷</span>
+        <span id="langName">FR</span>
+        <span class="lang-caret">▼</span>
+      </button>
+      <div class="lang-dropdown" id="langDropdown">
+        <div class="lang-option active" data-lang="fr" onclick="setLang('fr')">🇫🇷 Français</div>
+        <div class="lang-option" data-lang="en" onclick="setLang('en')">🇬🇧 English</div>
+        <div class="lang-option" data-lang="es" onclick="setLang('es')">🇪🇸 Español</div>
+        <div class="lang-option" data-lang="de" onclick="setLang('de')">🇩🇪 Deutsch</div>
+        <div class="lang-option" data-lang="it" onclick="setLang('it')">🇮🇹 Italiano</div>
+        <div class="lang-option" data-lang="ar" onclick="setLang('ar')">🇸🇦 العربية</div>
+        <div class="lang-option" data-lang="tr" onclick="setLang('tr')">🇹🇷 Türkçe</div>
+      </div>
+    </div>
+
+    <button class="btn-nav" onclick="document.getElementById('faqModal').classList.add('open')" data-i18n="nav.faq">FAQ</button>
+    <button class="btn-nav" style="background:var(--gold);color:var(--dark);border-color:var(--gold);" onclick="showSubscriberInfo()">⭐ <span data-i18n="nav.subscriber">Abonné</span></button>
   </div>
 </nav>
 
@@ -288,70 +348,70 @@ nav {
     <ellipse cx="18" cy="17" rx="3" ry="3.8" fill="#E8C96A"/>
     <circle cx="18" cy="12" r="2.8" fill="#C9A84C"/>
   </svg>
-  <div style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;margin-bottom:12px;">Votre essai gratuit est terminé</div>
-  <div style="font-family:'Crimson Pro',serif;font-size:1.1rem;color:var(--cream-dim);max-width:420px;line-height:1.7;margin-bottom:36px;">
+  <div id="i18n-trial-title" style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:700;margin-bottom:12px;">Votre essai gratuit est terminé</div>
+  <div id="i18n-trial-desc" style="font-family:'Crimson Pro',serif;font-size:1.1rem;color:var(--cream-dim);max-width:420px;line-height:1.7;margin-bottom:36px;">
     Vous avez profité de 2 jours d'accès gratuit à tous nos pronostics hippiques générés par IA. Continuez à recevoir les meilleures sélections chaque jour pour seulement 9,90€/mois.
   </div>
   <div style="background:var(--dark-3);border:1px solid var(--gold);padding:32px 40px;max-width:380px;width:100%;margin-bottom:24px;">
-    <div style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Abonnement complet</div>
+    <div id="i18n-plan-label" style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Abonnement complet</div>
     <div style="font-family:'Playfair Display',serif;font-size:3.5rem;font-weight:900;color:var(--gold);line-height:1;">9,90€</div>
-    <div style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--cream-dim);margin-bottom:20px;letter-spacing:0.1em;">PAR MOIS · SANS ENGAGEMENT</div>
+    <div id="i18n-per-month" style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--cream-dim);margin-bottom:20px;letter-spacing:0.1em;">PAR MOIS · SANS ENGAGEMENT</div>
     <ul style="list-style:none;text-align:left;margin-bottom:24px;display:flex;flex-direction:column;gap:10px;">
-      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Toutes les courses PMU du jour</li>
-      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Quinté+ avec analyse prioritaire</li>
-      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Données en temps réel (retards, non-partants)</li>
-      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Rapports de gains estimés</li>
-      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> Résiliable à tout moment</li>
+      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> <span data-i18n="expired.feature1">Toutes les courses PMU du jour</span></li>
+      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> <span data-i18n="expired.feature2">Quinté+ avec analyse prioritaire</span></li>
+      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> <span data-i18n="expired.feature3">Données en temps réel (retards, non-partants)</span></li>
+      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> <span data-i18n="expired.feature4">Rapports de gains estimés</span></li>
+      <li style="font-size:0.95rem;color:var(--cream-dim);display:flex;gap:10px;align-items:flex-start;"><span style="color:var(--gold);">✓</span> <span data-i18n="expired.feature5">Résiliable à tout moment</span></li>
     </ul>
-    <button onclick="activateSubscription()" style="width:100%;background:var(--gold);color:var(--dark);border:none;padding:16px;font-family:'DM Mono',monospace;font-size:0.8rem;letter-spacing:0.15em;cursor:pointer;font-weight:700;text-transform:uppercase;">
+    <button id="i18n-cta-btn" onclick="activateSubscription()" style="width:100%;background:var(--gold);color:var(--dark);border:none;padding:16px;font-family:'DM Mono',monospace;font-size:0.8rem;letter-spacing:0.15em;cursor:pointer;font-weight:700;text-transform:uppercase;">
       Commencer mon abonnement →
     </button>
   </div>
-  <div style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--cream-dim);letter-spacing:0.08em;">Paiement sécurisé · SSL · Stripe</div>
+  <div id="i18n-secure" style="font-family:'DM Mono',monospace;font-size:0.6rem;color:var(--cream-dim);letter-spacing:0.08em;">Paiement sécurisé · SSL · Stripe</div>
 </div>
 
 <!-- ENCART PUB -->
 <div class="ad-banner" id="adBanner">
-  <div class="ad-placeholder">Espace publicitaire — 728 × 90</div>
+  <div class="ad-placeholder" data-i18n="adBanner">Espace publicitaire — 728 × 90</div>
 </div>
 
 <!-- FAQ MODAL -->
 <div class="modal-overlay" id="faqModal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-box">
     <button class="modal-close" onclick="document.getElementById('faqModal').classList.remove('open')">✕</button>
-    <div class="modal-title">Questions fréquentes</div>
-    <div class="modal-sub">Tout ce que vous devez savoir</div>
+    <div class="modal-title" data-i18n="faq.title">Questions fréquentes</div>
+    <div class="modal-sub" data-i18n="faq.sub">Tout ce que vous devez savoir</div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Comment fonctionnent les pronostics ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Notre agent IA analyse chaque course : la forme récente des chevaux, les statistiques des jockeys, le terrain, la distance et les conditions du jour. Il classe les partants par probabilité de victoire et génère des rapports de gains estimés.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q1">Comment fonctionnent les pronostics ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a1">Notre agent IA analyse chaque course : la forme récente des chevaux, les statistiques des jockeys, le terrain, la distance et les conditions du jour. Il classe les partants par probabilité de victoire et génère des rapports de gains estimés.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Que signifient les rapports estimés ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Un rapport de 4.2× signifie que pour 1€ misé, vous récupérez environ 4,20€ si votre cheval gagne. Ce sont des estimations IA — les rapports réels PMU varient selon les mises des autres parieurs.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q2">Que signifient les rapports estimés ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a2">Un rapport de 4.2× signifie que pour 1€ misé, vous récupérez environ 4,20€ si votre cheval gagne. Ce sont des estimations IA — les rapports réels PMU varient selon les mises des autres parieurs.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Comment naviguer entre les courses ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Cliquez sur R1, R2, R3... pour changer de réunion (hippodrome). En dessous apparaissent les courses C1, C2, C3... Cliquez sur une course pour voir ses pronostics. La barre de recherche permet de trouver rapidement une course.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q3">Comment naviguer entre les courses ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a3">Cliquez sur R1, R2, R3... pour changer de réunion (hippodrome). En dessous apparaissent les courses C1, C2, C3... Cliquez sur une course pour voir ses pronostics. La barre de recherche permet de trouver rapidement une course.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Qu'est-ce que le Quinté+ ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Le Quinté+ est la course phare du jour (point doré dans la liste). L'IA lui consacre une analyse prioritaire avec plus de chevaux sélectionnés et des rapports Quinté+ supplémentaires.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q4">Qu'est-ce que le Quinté+ ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a4">Le Quinté+ est la course phare du jour (point doré dans la liste). L'IA lui consacre une analyse prioritaire avec plus de chevaux sélectionnés et des rapports Quinté+ supplémentaires.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Les pronostics sont-ils garantis ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Non. Les pronostics sont fournis à titre indicatif. Les courses comportent une part d'imprévisibilité. Jouez de manière responsable et ne misez jamais plus que ce que vous êtes prêt à perdre.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q5">Les pronostics sont-ils garantis ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a5">Non. Les pronostics sont fournis à titre indicatif. Les courses comportent une part d'imprévisibilité. Jouez de manière responsable et ne misez jamais plus que ce que vous êtes prêt à perdre.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">À quelle heure sont publiés les pronostics ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">L'agent IA génère les pronostics dès le matin (7h–9h) une fois le programme officiel publié. Ils restent disponibles jusqu'au départ de chaque course.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q6">À quelle heure sont publiés les pronostics ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a6">L'agent IA génère les pronostics dès le matin (7h–9h) une fois le programme officiel publié. Ils restent disponibles jusqu'au départ de chaque course.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Comment résilier mon abonnement ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Résiliez à tout moment depuis votre espace abonné. L'accès reste actif jusqu'à la fin de la période payée, sans frais supplémentaires.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q7">Comment résilier mon abonnement ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a7">Résiliez à tout moment depuis votre espace abonné. L'accès reste actif jusqu'à la fin de la période payée, sans frais supplémentaires.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')">Mon paiement est-il sécurisé ? <span class="faq-arrow">▼</span></div>
-      <div class="faq-a">Oui. Les paiements sont traités par Stripe, chiffrés SSL. Nous ne stockons jamais vos coordonnées bancaires.</div>
+      <div class="faq-q" onclick="this.parentElement.classList.toggle('open')"><span data-i18n="faq.q8">Mon paiement est-il sécurisé ?</span> <span class="faq-arrow">▼</span></div>
+      <div class="faq-a" data-i18n="faq.a8">Oui. Les paiements sont traités par Stripe, chiffrés SSL. Nous ne stockons jamais vos coordonnées bancaires.</div>
     </div>
   </div>
 </div>
@@ -366,8 +426,8 @@ nav {
     <div class="subscriber-badge">
       <div class="sub-icon">⭐</div>
       <div class="sub-info">
-        <div class="sub-label">Abonné actif</div>
-        <div class="sub-name">Accès illimité</div>
+        <div class="sub-label" data-i18n="sidebar.subscriber">Abonné actif</div>
+        <div class="sub-name" data-i18n="sidebar.access">Accès illimité</div>
       </div>
     </div>
 
@@ -375,7 +435,7 @@ nav {
     <div class="search-wrap">
       <div class="search-inner">
         <span class="search-icon">🔍</span>
-        <input class="search-input" type="text" placeholder="Chercher une course..." oninput="filterCourses(this.value)">
+        <input class="search-input" type="text" data-i18n-placeholder="sidebar.search" placeholder="Chercher une course..." oninput="filterCourses(this.value)">
       </div>
     </div>
 
@@ -385,7 +445,7 @@ nav {
     <!-- COURSES -->
     <div id="programmeLoading" style="display:none;flex-direction:column;align-items:center;padding:32px 20px;gap:12px;">
       <div class="spinner"></div>
-      <div style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--cream-dim);letter-spacing:0.08em;text-align:center;">Chargement du programme<br>du jour en cours...</div>
+      <div id="sidebarLoadingText" style="font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--cream-dim);letter-spacing:0.08em;text-align:center;" data-i18n="sidebar.loading">Chargement du programme du jour...</div>
     </div>
     <div class="course-nav" id="courseNav"></div>
 
@@ -396,7 +456,7 @@ nav {
 
     <div class="empty-state" id="emptyState" style="display:none;">
       <div class="empty-icon">🏇</div>
-      <div class="empty-text">Sélectionnez une course</div>
+      <div class="empty-text" data-i18n="main.selectCourse">Sélectionnez une course</div>
     </div>
 
     <div class="course-detail" id="courseDetail">
@@ -408,26 +468,26 @@ nav {
         </div>
         <div class="detail-time-box">
           <div class="detail-time-val" id="dTime"></div>
-          <div class="detail-time-lbl">Départ</div>
+          <div class="detail-time-lbl" data-i18n="main.departure">Départ</div>
         </div>
       </div>
 
       <div id="quinteBadge" style="display:none;">
-        <div class="quinte-badge-full">★ Quinté+ du Jour — Analyse Prioritaire</div>
+        <div class="quinte-badge-full" data-i18n="main.quinteAnalysis">★ Quinté+ du Jour — Analyse Prioritaire</div>
       </div>
 
       <div class="loading-wrap" id="loadingWrap" style="display:none;">
         <div class="spinner"></div>
-        <div class="loading-txt">L'IA analyse la course...</div>
+        <div class="loading-txt" data-i18n="main.aiAnalyzing">L'IA analyse la course...</div>
       </div>
 
       <div class="prono-block" id="pronoBlock">
         <div id="rtBanner"></div>
-        <div class="block-label">Sélection IA — Numéros de dossard</div>
+        <div class="block-label" data-i18n="main.selectionLabel">Sélection IA — Numéros de dossard</div>
         <div class="horses-grid" id="horsesGrid"></div>
-        <div class="block-label">Rapports de gains estimés</div>
+        <div class="block-label" data-i18n="main.reportsLabel">Rapports de gains estimés</div>
         <div class="rapports-grid" id="rapportsGrid"></div>
-        <div class="block-label">Analyse IA</div>
+        <div class="block-label" data-i18n="main.analysisLabel">Analyse IA</div>
         <div class="analyse-card" id="analyseCard"></div>
       </div>
     </div>
@@ -436,13 +496,586 @@ nav {
 </div>
 
 <script>
+// ── I18N SYSTEM ──
+const LANGS = {
+  fr: { flag:'🇫🇷', name:'FR', locale:'fr-FR', dir:'ltr' },
+  en: { flag:'🇬🇧', name:'EN', locale:'en-GB', dir:'ltr' },
+  es: { flag:'🇪🇸', name:'ES', locale:'es-ES', dir:'ltr' },
+  de: { flag:'🇩🇪', name:'DE', locale:'de-DE', dir:'ltr' },
+  it: { flag:'🇮🇹', name:'IT', locale:'it-IT', dir:'ltr' },
+  ar: { flag:'🇸🇦', name:'AR', locale:'ar-SA', dir:'rtl' },
+  tr: { flag:'🇹🇷', name:'TR', locale:'tr-TR', dir:'ltr' }
+};
+
+const i18n = {
+  fr: {
+    'nav.aiPill':'Agent IA actif',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'Abonné',
+    'trial.bannerText':'⏳ Essai gratuit — Il vous reste {time}',
+    'trial.subscribe':"S'abonner — 9,90€/mois",
+    'trial.daysLeft':'{n} jour(s)',
+    'trial.hoursLeft':'{n}h',
+    'trial.remaining':'Essai gratuit — {time} restant(s)',
+    'expired.title':'Votre essai gratuit est terminé',
+    'expired.desc':"Vous avez profité de 2 jours d'accès gratuit à tous nos pronostics hippiques générés par IA. Continuez à recevoir les meilleures sélections chaque jour pour seulement 9,90€/mois.",
+    'expired.plan':'Abonnement complet',
+    'expired.perMonth':'PAR MOIS · SANS ENGAGEMENT',
+    'expired.feature1':'Toutes les courses PMU du jour',
+    'expired.feature2':'Quinté+ avec analyse prioritaire',
+    'expired.feature3':'Données en temps réel (retards, non-partants)',
+    'expired.feature4':'Rapports de gains estimés',
+    'expired.feature5':'Résiliable à tout moment',
+    'expired.cta':'Commencer mon abonnement →',
+    'expired.secure':'Paiement sécurisé · SSL · Stripe',
+    'adBanner':'Espace publicitaire — 728 × 90',
+    'faq.title':'Questions fréquentes',
+    'faq.sub':'Tout ce que vous devez savoir',
+    'faq.q1':'Comment fonctionnent les pronostics ?',
+    'faq.a1':"Notre agent IA analyse chaque course : la forme récente des chevaux, les statistiques des jockeys, le terrain, la distance et les conditions du jour. Il classe les partants par probabilité de victoire et génère des rapports de gains estimés.",
+    'faq.q2':'Que signifient les rapports estimés ?',
+    'faq.a2':"Un rapport de 4.2× signifie que pour 1€ misé, vous récupérez environ 4,20€ si votre cheval gagne. Ce sont des estimations IA — les rapports réels PMU varient selon les mises des autres parieurs.",
+    'faq.q3':'Comment naviguer entre les courses ?',
+    'faq.a3':"Cliquez sur R1, R2, R3... pour changer de réunion (hippodrome). En dessous apparaissent les courses C1, C2, C3... Cliquez sur une course pour voir ses pronostics. La barre de recherche permet de trouver rapidement une course.",
+    'faq.q4':'Qu\'est-ce que le Quinté+ ?',
+    'faq.a4':"Le Quinté+ est la course phare du jour (point doré dans la liste). L'IA lui consacre une analyse prioritaire avec plus de chevaux sélectionnés et des rapports Quinté+ supplémentaires.",
+    'faq.q5':'Les pronostics sont-ils garantis ?',
+    'faq.a5':"Non. Les pronostics sont fournis à titre indicatif. Les courses comportent une part d'imprévisibilité. Jouez de manière responsable et ne misez jamais plus que ce que vous êtes prêt à perdre.",
+    'faq.q6':'À quelle heure sont publiés les pronostics ?',
+    'faq.a6':"L'agent IA génère les pronostics dès le matin (7h–9h) une fois le programme officiel publié. Ils restent disponibles jusqu'au départ de chaque course.",
+    'faq.q7':'Comment résilier mon abonnement ?',
+    'faq.a7':"Résiliez à tout moment depuis votre espace abonné. L'accès reste actif jusqu'à la fin de la période payée, sans frais supplémentaires.",
+    'faq.q8':'Mon paiement est-il sécurisé ?',
+    'faq.a8':"Oui. Les paiements sont traités par Stripe, chiffrés SSL. Nous ne stockons jamais vos coordonnées bancaires.",
+    'sidebar.subscriber':'Abonné actif',
+    'sidebar.access':'Accès illimité',
+    'sidebar.search':'Chercher une course...',
+    'sidebar.loading':'Chargement du programme du jour...',
+    'main.selectCourse':'Sélectionnez une course',
+    'main.departure':'Départ',
+    'main.quinteAnalysis':'★ Quinté+ du Jour — Analyse Prioritaire',
+    'main.aiAnalyzing':"L'IA analyse la course...",
+    'main.aiGenerating':"🤖 L'IA génère les pronostics...",
+    'main.selectionLabel':'Sélection IA — Numéros de dossard',
+    'main.reportsLabel':'Rapports de gains estimés',
+    'main.analysisLabel':'Analyse IA',
+    'main.dossard':'Dossard',
+    'main.favourite':'★ Favori IA',
+    'main.odds':'Cote :',
+    'main.nonPartant':'⚠ Non-partants déclarés',
+    'main.starters':'{n} partants',
+    'main.terrain':'Terrain : {t}',
+    'main.programmeLoaded':'✓ Programme PMU du jour chargé',
+    'reports.winner':'Gagnant',
+    'reports.place':'Placé',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Ordre',
+    'alert.subscriber':'✅ Abonnement actif\n\n📅 Renouvellement : le 8 de chaque mois\n💳 9,90€/mois — Stripe sécurisé\n\nPour gérer votre abonnement, contactez le support.',
+    'alert.stripe':'Redirection vers le paiement Stripe...\n\n9,90€/mois — Sans engagement\nPaiement sécurisé SSL',
+    'fallback.analyse':"Pronostics générés par l'IA sur la base des performances récentes et des conditions du jour."
+  },
+  en: {
+    'nav.aiPill':'AI Agent active',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'Subscriber',
+    'trial.bannerText':'⏳ Free trial — {time} remaining',
+    'trial.subscribe':'Subscribe — €9.90/month',
+    'trial.daysLeft':'{n} day(s)',
+    'trial.hoursLeft':'{n}h',
+    'trial.remaining':'Free trial — {time} remaining',
+    'expired.title':'Your free trial has ended',
+    'expired.desc':'You enjoyed 2 days of free access to all our AI-generated horse racing tips. Keep receiving the best selections every day for only €9.90/month.',
+    'expired.plan':'Full subscription',
+    'expired.perMonth':'PER MONTH · NO COMMITMENT',
+    'expired.feature1':'All daily PMU races',
+    'expired.feature2':'Quinté+ with priority analysis',
+    'expired.feature3':'Real-time data (delays, non-runners)',
+    'expired.feature4':'Estimated winnings reports',
+    'expired.feature5':'Cancel anytime',
+    'expired.cta':'Start my subscription →',
+    'expired.secure':'Secure payment · SSL · Stripe',
+    'adBanner':'Advertising space — 728 × 90',
+    'faq.title':'Frequently asked questions',
+    'faq.sub':'Everything you need to know',
+    'faq.q1':'How do the tips work?',
+    'faq.a1':'Our AI agent analyzes each race: recent form of horses, jockey statistics, track condition, distance and day conditions. It ranks runners by probability of winning and generates estimated winnings reports.',
+    'faq.q2':'What do the estimated odds mean?',
+    'faq.a2':'Odds of 4.2× means that for €1 bet, you get back approximately €4.20 if your horse wins. These are AI estimates — real PMU odds vary depending on other bettors\' stakes.',
+    'faq.q3':'How do I navigate between races?',
+    'faq.a3':'Click on R1, R2, R3... to change the meeting (racecourse). Below that, races C1, C2, C3... appear. Click on a race to see its tips. The search bar allows you to quickly find a race.',
+    'faq.q4':'What is the Quinté+?',
+    'faq.a4':'The Quinté+ is the featured race of the day (gold dot in the list). The AI dedicates priority analysis to it with more selected horses and additional Quinté+ reports.',
+    'faq.q5':'Are the tips guaranteed?',
+    'faq.a5':'No. Tips are provided for informational purposes only. Races involve an element of unpredictability. Gamble responsibly and never bet more than you can afford to lose.',
+    'faq.q6':'When are the tips published?',
+    'faq.a6':'The AI agent generates tips early in the morning (7am–9am) once the official program is published. They remain available until the start of each race.',
+    'faq.q7':'How do I cancel my subscription?',
+    'faq.a7':'Cancel anytime from your subscriber area. Access remains active until the end of the paid period, with no additional charges.',
+    'faq.q8':'Is my payment secure?',
+    'faq.a8':'Yes. Payments are processed by Stripe, SSL encrypted. We never store your bank details.',
+    'sidebar.subscriber':'Active subscriber',
+    'sidebar.access':'Unlimited access',
+    'sidebar.search':'Search a race...',
+    'sidebar.loading':"Loading today's program...",
+    'main.selectCourse':'Select a race',
+    'main.departure':'Start',
+    'main.quinteAnalysis':'★ Today\'s Quinté+ — Priority Analysis',
+    'main.aiAnalyzing':'AI is analyzing the race...',
+    'main.aiGenerating':'🤖 AI generating tips...',
+    'main.selectionLabel':'AI Selection — Bib numbers',
+    'main.reportsLabel':'Estimated winnings reports',
+    'main.analysisLabel':'AI Analysis',
+    'main.dossard':'Bib',
+    'main.favourite':'★ AI Favourite',
+    'main.odds':'Odds:',
+    'main.nonPartant':'⚠ Declared non-runners',
+    'main.starters':'{n} runners',
+    'main.terrain':'Track: {t}',
+    'main.programmeLoaded':"✓ Today's PMU program loaded",
+    'reports.winner':'Winner',
+    'reports.place':'Placed',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Order',
+    'alert.subscriber':'✅ Active subscription\n\n📅 Renewal: the 8th of each month\n💳 €9.90/month — Secure Stripe\n\nTo manage your subscription, contact support.',
+    'alert.stripe':'Redirecting to Stripe payment...\n\n€9.90/month — No commitment\nSSL secure payment',
+    'fallback.analyse':'Tips generated by AI based on recent performances and today\'s conditions.'
+  },
+  es: {
+    'nav.aiPill':'Agente IA activo',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'Suscriptor',
+    'trial.bannerText':'⏳ Prueba gratuita — Te quedan {time}',
+    'trial.subscribe':'Suscribirse — 9,90€/mes',
+    'trial.daysLeft':'{n} día(s)',
+    'trial.hoursLeft':'{n}h',
+    'trial.remaining':'Prueba gratuita — {time} restante(s)',
+    'expired.title':'Tu prueba gratuita ha terminado',
+    'expired.desc':'Disfrutaste de 2 días de acceso gratuito a todos nuestros pronósticos hípicos generados por IA. Sigue recibiendo las mejores selecciones cada día por solo 9,90€/mes.',
+    'expired.plan':'Suscripción completa',
+    'expired.perMonth':'POR MES · SIN COMPROMISO',
+    'expired.feature1':'Todas las carreras PMU del día',
+    'expired.feature2':'Quinté+ con análisis prioritario',
+    'expired.feature3':'Datos en tiempo real (retrasos, no participantes)',
+    'expired.feature4':'Informes de ganancias estimadas',
+    'expired.feature5':'Cancelable en cualquier momento',
+    'expired.cta':'Comenzar mi suscripción →',
+    'expired.secure':'Pago seguro · SSL · Stripe',
+    'adBanner':'Espacio publicitario — 728 × 90',
+    'faq.title':'Preguntas frecuentes',
+    'faq.sub':'Todo lo que necesitas saber',
+    'faq.q1':'¿Cómo funcionan los pronósticos?',
+    'faq.a1':'Nuestro agente IA analiza cada carrera: la forma reciente de los caballos, las estadísticas de los jockeys, el terreno, la distancia y las condiciones del día. Clasifica a los participantes por probabilidad de victoria y genera informes de ganancias estimadas.',
+    'faq.q2':'¿Qué significan las cuotas estimadas?',
+    'faq.a2':'Una cuota de 4,2× significa que por 1€ apostado, recibirás aproximadamente 4,20€ si tu caballo gana. Estas son estimaciones de IA — las cuotas reales del PMU varían según las apuestas de los demás jugadores.',
+    'faq.q3':'¿Cómo navego entre las carreras?',
+    'faq.a3':'Haz clic en R1, R2, R3... para cambiar de reunión (hipódromo). Debajo aparecen las carreras C1, C2, C3... Haz clic en una carrera para ver sus pronósticos. La barra de búsqueda permite encontrar rápidamente una carrera.',
+    'faq.q4':'¿Qué es el Quinté+?',
+    'faq.a4':'El Quinté+ es la carrera destacada del día (punto dorado en la lista). La IA le dedica un análisis prioritario con más caballos seleccionados e informes Quinté+ adicionales.',
+    'faq.q5':'¿Están garantizados los pronósticos?',
+    'faq.a5':'No. Los pronósticos se proporcionan con fines informativos. Las carreras conllevan un elemento de imprevisibilidad. Juega de forma responsable y nunca apuestes más de lo que puedes permitirte perder.',
+    'faq.q6':'¿A qué hora se publican los pronósticos?',
+    'faq.a6':'El agente IA genera los pronósticos por la mañana (7h–9h) una vez publicado el programa oficial. Permanecen disponibles hasta el inicio de cada carrera.',
+    'faq.q7':'¿Cómo cancelo mi suscripción?',
+    'faq.a7':'Cancela en cualquier momento desde tu área de suscriptor. El acceso permanece activo hasta el final del período pagado, sin cargos adicionales.',
+    'faq.q8':'¿Es seguro mi pago?',
+    'faq.a8':'Sí. Los pagos son procesados por Stripe, cifrados SSL. Nunca almacenamos tus datos bancarios.',
+    'sidebar.subscriber':'Suscriptor activo',
+    'sidebar.access':'Acceso ilimitado',
+    'sidebar.search':'Buscar una carrera...',
+    'sidebar.loading':'Cargando el programa del día...',
+    'main.selectCourse':'Selecciona una carrera',
+    'main.departure':'Salida',
+    'main.quinteAnalysis':'★ Quinté+ del Día — Análisis Prioritario',
+    'main.aiAnalyzing':'La IA analiza la carrera...',
+    'main.aiGenerating':'🤖 La IA genera los pronósticos...',
+    'main.selectionLabel':'Selección IA — Números de dorsal',
+    'main.reportsLabel':'Informes de ganancias estimadas',
+    'main.analysisLabel':'Análisis IA',
+    'main.dossard':'Dorsal',
+    'main.favourite':'★ Favorito IA',
+    'main.odds':'Cuota:',
+    'main.nonPartant':'⚠ No participantes declarados',
+    'main.starters':'{n} participantes',
+    'main.terrain':'Terreno: {t}',
+    'main.programmeLoaded':'✓ Programa PMU del día cargado',
+    'reports.winner':'Ganador',
+    'reports.place':'Colocado',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Orden',
+    'alert.subscriber':'✅ Suscripción activa\n\n📅 Renovación: el 8 de cada mes\n💳 9,90€/mes — Stripe seguro\n\nPara gestionar tu suscripción, contacta con el soporte.',
+    'alert.stripe':'Redirigiendo al pago de Stripe...\n\n9,90€/mes — Sin compromiso\nPago SSL seguro',
+    'fallback.analyse':'Pronósticos generados por IA basados en rendimientos recientes y condiciones del día.'
+  },
+  de: {
+    'nav.aiPill':'KI-Agent aktiv',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'Abonnent',
+    'trial.bannerText':'⏳ Kostenlose Testphase — Noch {time} übrig',
+    'trial.subscribe':'Abonnieren — 9,90€/Monat',
+    'trial.daysLeft':'{n} Tag(e)',
+    'trial.hoursLeft':'{n}h',
+    'trial.remaining':'Kostenlose Testphase — {time} verbleibend',
+    'expired.title':'Ihre kostenlose Testphase ist beendet',
+    'expired.desc':'Sie haben 2 Tage kostenlosen Zugang zu allen unseren KI-generierten Pferderennen-Tipps genossen. Empfangen Sie weiterhin täglich die besten Auswahlen für nur 9,90€/Monat.',
+    'expired.plan':'Vollabonnement',
+    'expired.perMonth':'PRO MONAT · OHNE VERPFLICHTUNG',
+    'expired.feature1':'Alle täglichen PMU-Rennen',
+    'expired.feature2':'Quinté+ mit vorrangiger Analyse',
+    'expired.feature3':'Echtzeit-Daten (Verzögerungen, Nicht-Starter)',
+    'expired.feature4':'Geschätzte Gewinnberichte',
+    'expired.feature5':'Jederzeit kündbar',
+    'expired.cta':'Mein Abonnement starten →',
+    'expired.secure':'Sichere Zahlung · SSL · Stripe',
+    'adBanner':'Werbefläche — 728 × 90',
+    'faq.title':'Häufig gestellte Fragen',
+    'faq.sub':'Alles, was Sie wissen müssen',
+    'faq.q1':'Wie funktionieren die Tipps?',
+    'faq.a1':'Unser KI-Agent analysiert jedes Rennen: die aktuelle Form der Pferde, Jockey-Statistiken, den Untergrund, die Distanz und die Bedingungen des Tages. Er ordnet die Starter nach Siegwahrscheinlichkeit und erstellt geschätzte Gewinnberichte.',
+    'faq.q2':'Was bedeuten die geschätzten Quoten?',
+    'faq.a2':'Eine Quote von 4,2× bedeutet, dass Sie für 1€ Einsatz ca. 4,20€ zurückbekommen, wenn Ihr Pferd gewinnt. Dies sind KI-Schätzungen — die tatsächlichen PMU-Quoten variieren je nach den Einsätzen anderer Spieler.',
+    'faq.q3':'Wie navigiere ich zwischen den Rennen?',
+    'faq.a3':'Klicken Sie auf R1, R2, R3... um den Meeting (Rennbahn) zu wechseln. Darunter erscheinen die Rennen C1, C2, C3... Klicken Sie auf ein Rennen, um dessen Tipps zu sehen. Die Suchleiste ermöglicht das schnelle Finden eines Rennens.',
+    'faq.q4':'Was ist der Quinté+?',
+    'faq.a4':'Der Quinté+ ist das Hauptrennen des Tages (goldener Punkt in der Liste). Die KI widmet ihm eine vorrangige Analyse mit mehr ausgewählten Pferden und zusätzlichen Quinté+-Berichten.',
+    'faq.q5':'Sind die Tipps garantiert?',
+    'faq.a5':'Nein. Tipps werden nur zu Informationszwecken bereitgestellt. Rennen beinhalten ein Element der Unvorhersehbarkeit. Spielen Sie verantwortungsbewusst und setzen Sie nie mehr als Sie sich leisten können zu verlieren.',
+    'faq.q6':'Wann werden die Tipps veröffentlicht?',
+    'faq.a6':'Der KI-Agent erstellt die Tipps früh morgens (7–9 Uhr), sobald das offizielle Programm veröffentlicht wird. Sie sind bis zum Start jedes Rennens verfügbar.',
+    'faq.q7':'Wie kündige ich mein Abonnement?',
+    'faq.a7':'Kündigen Sie jederzeit in Ihrem Abonnentenbereich. Der Zugang bleibt bis zum Ende des bezahlten Zeitraums aktif, ohne zusätzliche Kosten.',
+    'faq.q8':'Ist meine Zahlung sicher?',
+    'faq.a8':'Ja. Zahlungen werden von Stripe verarbeitet, SSL-verschlüsselt. Wir speichern niemals Ihre Bankdaten.',
+    'sidebar.subscriber':'Aktiver Abonnent',
+    'sidebar.access':'Unbegrenzter Zugang',
+    'sidebar.search':'Rennen suchen...',
+    'sidebar.loading':'Tagesprogramm wird geladen...',
+    'main.selectCourse':'Wählen Sie ein Rennen',
+    'main.departure':'Start',
+    'main.quinteAnalysis':'★ Quinté+ des Tages — Prioritätsanalyse',
+    'main.aiAnalyzing':'KI analysiert das Rennen...',
+    'main.aiGenerating':'🤖 KI erstellt Tipps...',
+    'main.selectionLabel':'KI-Auswahl — Startnummern',
+    'main.reportsLabel':'Geschätzte Gewinnberichte',
+    'main.analysisLabel':'KI-Analyse',
+    'main.dossard':'Startnr.',
+    'main.favourite':'★ KI-Favorit',
+    'main.odds':'Quote:',
+    'main.nonPartant':'⚠ Gemeldete Nicht-Starter',
+    'main.starters':'{n} Starter',
+    'main.terrain':'Untergrund: {t}',
+    'main.programmeLoaded':'✓ Heutiges PMU-Programm geladen',
+    'reports.winner':'Sieger',
+    'reports.place':'Platziert',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Reihenfolge',
+    'alert.subscriber':'✅ Aktives Abonnement\n\n📅 Erneuerung: am 8. jedes Monats\n💳 9,90€/Monat — Sicheres Stripe\n\nWenden Sie sich an den Support, um Ihr Abonnement zu verwalten.',
+    'alert.stripe':'Weiterleitung zur Stripe-Zahlung...\n\n9,90€/Monat — Ohne Verpflichtung\nSSL-gesicherte Zahlung',
+    'fallback.analyse':'Tipps von der KI auf Basis der jüngsten Leistungen und der heutigen Bedingungen generiert.'
+  },
+  it: {
+    'nav.aiPill':'Agente IA attivo',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'Abbonato',
+    'trial.bannerText':'⏳ Prova gratuita — Ti restano {time}',
+    'trial.subscribe':'Abbonati — 9,90€/mese',
+    'trial.daysLeft':'{n} giorno/i',
+    'trial.hoursLeft':'{n}h',
+    'trial.remaining':'Prova gratuita — {time} rimanente',
+    'expired.title':'La tua prova gratuita è terminata',
+    'expired.desc':"Hai usufruito di 2 giorni di accesso gratuito a tutti i nostri pronostici ippici generati dall'IA. Continua a ricevere le migliori selezioni ogni giorno per soli 9,90€/mese.",
+    'expired.plan':'Abbonamento completo',
+    'expired.perMonth':'AL MESE · SENZA IMPEGNO',
+    'expired.feature1':'Tutte le corse PMU del giorno',
+    'expired.feature2':'Quinté+ con analisi prioritaria',
+    'expired.feature3':'Dati in tempo reale (ritardi, non partenti)',
+    'expired.feature4':'Report sui guadagni stimati',
+    'expired.feature5':'Disdetta in qualsiasi momento',
+    'expired.cta':'Inizia il mio abbonamento →',
+    'expired.secure':'Pagamento sicuro · SSL · Stripe',
+    'adBanner':'Spazio pubblicitario — 728 × 90',
+    'faq.title':'Domande frequenti',
+    'faq.sub':'Tutto quello che devi sapere',
+    'faq.q1':'Come funzionano i pronostici?',
+    'faq.a1':"Il nostro agente IA analizza ogni corsa: la forma recente dei cavalli, le statistiche dei fantini, il terreno, la distanza e le condizioni del giorno. Classifica i partenti per probabilità di vittoria e genera report sui guadagni stimati.",
+    'faq.q2':'Cosa significano i rapporti stimati?',
+    'faq.a2':"Un rapporto di 4,2× significa che per 1€ scommesso, recuperi circa 4,20€ se il tuo cavallo vince. Queste sono stime dell'IA — i rapporti reali PMU variano in base alle puntate degli altri scommettitori.",
+    'faq.q3':'Come navigo tra le corse?',
+    'faq.a3':'Clicca su R1, R2, R3... per cambiare riunione (ippodromo). Sotto appaiono le corse C1, C2, C3... Clicca su una corsa per vedere i suoi pronostici. La barra di ricerca permette di trovare rapidamente una corsa.',
+    'faq.q4':'Cos\'è il Quinté+?',
+    'faq.a4':"Il Quinté+ è la corsa principale del giorno (punto dorato nella lista). L'IA gli dedica un'analisi prioritaria con più cavalli selezionati e report Quinté+ aggiuntivi.",
+    'faq.q5':'I pronostici sono garantiti?',
+    'faq.a5':'No. I pronostici vengono forniti a titolo indicativo. Le corse comportano un elemento di imprevedibilità. Gioca responsabilmente e non scommettere mai più di quanto puoi permetterti di perdere.',
+    'faq.q6':'A che ora vengono pubblicati i pronostici?',
+    'faq.a6':"L'agente IA genera i pronostici la mattina presto (7–9h) una volta pubblicato il programma ufficiale. Rimangono disponibili fino alla partenza di ogni corsa.",
+    'faq.q7':'Come cancello il mio abbonamento?',
+    'faq.a7':'Disdici in qualsiasi momento dalla tua area abbonato. L\'accesso rimane attivo fino alla fine del periodo pagato, senza costi aggiuntivi.',
+    'faq.q8':'Il mio pagamento è sicuro?',
+    'faq.a8':'Sì. I pagamenti sono elaborati da Stripe, crittografati SSL. Non memorizziamo mai i tuoi dati bancari.',
+    'sidebar.subscriber':'Abbonato attivo',
+    'sidebar.access':'Accesso illimitato',
+    'sidebar.search':'Cerca una corsa...',
+    'sidebar.loading':'Caricamento del programma del giorno...',
+    'main.selectCourse':'Seleziona una corsa',
+    'main.departure':'Partenza',
+    'main.quinteAnalysis':'★ Quinté+ del Giorno — Analisi Prioritaria',
+    'main.aiAnalyzing':"L'IA analizza la corsa...",
+    'main.aiGenerating':"🤖 L'IA genera i pronostici...",
+    'main.selectionLabel':'Selezione IA — Numeri di pettorale',
+    'main.reportsLabel':'Report sui guadagni stimati',
+    'main.analysisLabel':'Analisi IA',
+    'main.dossard':'Pettorale',
+    'main.favourite':'★ Favorito IA',
+    'main.odds':'Quota:',
+    'main.nonPartant':'⚠ Non partenti dichiarati',
+    'main.starters':'{n} partenti',
+    'main.terrain':'Terreno: {t}',
+    'main.programmeLoaded':'✓ Programma PMU del giorno caricato',
+    'reports.winner':'Vincitore',
+    'reports.place':'Piazzato',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Ordine',
+    'alert.subscriber':"✅ Abbonamento attivo\n\n📅 Rinnovo: l'8 di ogni mese\n💳 9,90€/mese — Stripe sicuro\n\nPer gestire il tuo abbonamento, contatta il supporto.",
+    'alert.stripe':'Reindirizzamento al pagamento Stripe...\n\n9,90€/mese — Senza impegno\nPagamento SSL sicuro',
+    'fallback.analyse':"Pronostici generati dall'IA sulla base delle prestazioni recenti e delle condizioni del giorno."
+  },
+  ar: {
+    'nav.aiPill':'وكيل الذكاء الاصطناعي نشط',
+    'nav.faq':'FAQ',
+    'nav.subscriber':'مشترك',
+    'trial.bannerText':'⏳ تجربة مجانية — تبقى لك {time}',
+    'trial.subscribe':'اشترك — 9.90€/شهر',
+    'trial.daysLeft':'{n} يوم',
+    'trial.hoursLeft':'{n} ساعة',
+    'trial.remaining':'تجربة مجانية — {time} متبقية',
+    'expired.title':'انتهت تجربتك المجانية',
+    'expired.desc':'استمتعت بيومين من الوصول المجاني إلى جميع توقعاتنا لسباقات الخيل المُولَّدة بالذكاء الاصطناعي. استمر في تلقي أفضل الاختيارات كل يوم مقابل 9.90€/شهر فقط.',
+    'expired.plan':'اشتراك كامل',
+    'expired.perMonth':'شهرياً · بدون التزام',
+    'expired.feature1':'جميع سباقات PMU اليومية',
+    'expired.feature2':'Quinté+ مع تحليل ذي أولوية',
+    'expired.feature3':'بيانات في الوقت الفعلي (تأخيرات، غير المشاركين)',
+    'expired.feature4':'تقارير الأرباح المقدرة',
+    'expired.feature5':'قابل للإلغاء في أي وقت',
+    'expired.cta':'← ابدأ اشتراكي',
+    'expired.secure':'دفع آمن · SSL · Stripe',
+    'adBanner':'مساحة إعلانية — 728 × 90',
+    'faq.title':'الأسئلة الشائعة',
+    'faq.sub':'كل ما تحتاج معرفته',
+    'faq.q1':'كيف تعمل التوقعات؟',
+    'faq.a1':'يحلل وكيل الذكاء الاصطناعي لدينا كل سباق: الشكل الأخير للأحصنة، وإحصائيات الفرسان، والأرض، والمسافة، وظروف اليوم. يُصنِّف المشاركين حسب احتمالية الفوز ويُولِّد تقارير الأرباح المقدرة.',
+    'faq.q2':'ماذا تعني النسب المقدرة؟',
+    'faq.a2':'نسبة 4.2× تعني أنك مقابل 1€ تُراهن به، ستحصل على حوالي 4.20€ إذا فاز حصانك. هذه تقديرات الذكاء الاصطناعي — تتفاوت نسب PMU الحقيقية حسب رهانات المراهنين الآخرين.',
+    'faq.q3':'كيف أتنقل بين السباقات؟',
+    'faq.a3':'انقر على R1، R2، R3... لتغيير الاجتماع (ميدان السباق). تظهر أدناه السباقات C1، C2، C3... انقر على سباق لعرض توقعاته. يتيح لك شريط البحث إيجاد سباق بسرعة.',
+    'faq.q4':'ما هو Quinté+؟',
+    'faq.a4':'Quinté+ هو السباق الرئيسي لليوم (النقطة الذهبية في القائمة). يُخصِّص الذكاء الاصطناعي له تحليلاً ذا أولوية مع المزيد من الأحصنة المختارة وتقارير Quinté+ إضافية.',
+    'faq.q5':'هل التوقعات مضمونة؟',
+    'faq.a5':'لا. تُقدَّم التوقعات لأغراض إعلامية فقط. تنطوي السباقات على عنصر من عدم القدرة على التنبؤ. العب بمسؤولية ولا تُراهن أبداً بأكثر مما يمكنك تحمل خسارته.',
+    'faq.q6':'متى تُنشر التوقعات؟',
+    'faq.a6':'يُولِّد وكيل الذكاء الاصطناعي التوقعات في الصباح الباكر (7–9 صباحاً) بمجرد نشر البرنامج الرسمي. تبقى متاحة حتى انطلاق كل سباق.',
+    'faq.q7':'كيف أُلغي اشتراكي؟',
+    'faq.a7':'ألغِ في أي وقت من منطقة مشتركك. يظل الوصول نشطاً حتى نهاية الفترة المدفوعة، دون رسوم إضافية.',
+    'faq.q8':'هل دفعي آمن؟',
+    'faq.a8':'نعم. تتم معالجة المدفوعات بواسطة Stripe، مشفرة بـ SSL. لا نحتفظ أبداً ببياناتك المصرفية.',
+    'sidebar.subscriber':'مشترك نشط',
+    'sidebar.access':'وصول غير محدود',
+    'sidebar.search':'البحث عن سباق...',
+    'sidebar.loading':'جارٍ تحميل برنامج اليوم...',
+    'main.selectCourse':'اختر سباقاً',
+    'main.departure':'الانطلاق',
+    'main.quinteAnalysis':'★ Quinté+ اليوم — تحليل ذو أولوية',
+    'main.aiAnalyzing':'الذكاء الاصطناعي يحلل السباق...',
+    'main.aiGenerating':'🤖 الذكاء الاصطناعي يُولِّد التوقعات...',
+    'main.selectionLabel':'اختيار الذكاء الاصطناعي — أرقام الأحصنة',
+    'main.reportsLabel':'تقارير الأرباح المقدرة',
+    'main.analysisLabel':'تحليل الذكاء الاصطناعي',
+    'main.dossard':'رقم',
+    'main.favourite':'★ مفضل الذكاء الاصطناعي',
+    'main.odds':'الحصة:',
+    'main.nonPartant':'⚠ غير المشاركين المُعلَنين',
+    'main.starters':'{n} مشاركاً',
+    'main.terrain':'الأرض: {t}',
+    'main.programmeLoaded':'✓ تم تحميل برنامج PMU اليوم',
+    'reports.winner':'الفائز',
+    'reports.place':'المُصنَّف',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'ترتيب Quinté',
+    'alert.subscriber':'✅ اشتراك نشط\n\n📅 التجديد: في الثامن من كل شهر\n💳 9.90€/شهر — Stripe آمن\n\nللتحكم في اشتراكك، تواصل مع الدعم.',
+    'alert.stripe':'جارٍ التوجيه إلى دفع Stripe...\n\n9.90€/شهر — بدون التزام\nدفع آمن بـ SSL',
+    'fallback.analyse':'توقعات مُولَّدة بالذكاء الاصطناعي بناءً على الأداءات الأخيرة وظروف اليوم.'
+  },
+  tr: {
+    'nav.aiPill':'YZ Ajanı aktif',
+    'nav.faq':'SSS',
+    'nav.subscriber':'Abone',
+    'trial.bannerText':'⏳ Ücretsiz deneme — {time} kaldı',
+    'trial.subscribe':'Abone ol — 9,90€/ay',
+    'trial.daysLeft':'{n} gün',
+    'trial.hoursLeft':'{n} saat',
+    'trial.remaining':'Ücretsiz deneme — {time} kalan',
+    'expired.title':'Ücretsiz deneme süreniz sona erdi',
+    'expired.desc':'YZ tarafından oluşturulan tüm at yarışı tahminlerimize 2 günlük ücretsiz erişimden yararlandınız. Ayda sadece 9,90€\'ya her gün en iyi seçimleri almaya devam edin.',
+    'expired.plan':'Tam abonelik',
+    'expired.perMonth':'AYLIK · TAAHHÜTSÜZ',
+    'expired.feature1':'Günlük tüm PMU yarışları',
+    'expired.feature2':'Öncelikli analizle Quinté+',
+    'expired.feature3':'Gerçek zamanlı veriler (gecikmeler, katılmayan atlar)',
+    'expired.feature4':'Tahmini kazanç raporları',
+    'expired.feature5':'Her an iptal edilebilir',
+    'expired.cta':'Aboneliğimi başlat →',
+    'expired.secure':'Güvenli ödeme · SSL · Stripe',
+    'adBanner':'Reklam alanı — 728 × 90',
+    'faq.title':'Sıkça sorulan sorular',
+    'faq.sub':'Bilmeniz gereken her şey',
+    'faq.q1':'Tahminler nasıl çalışır?',
+    'faq.a1':'YZ ajanımız her yarışı analiz eder: atların son formunu, jokey istatistiklerini, zemini, mesafeyi ve gün koşullarını. Yarışmacıları kazanma olasılığına göre sıralar ve tahmini kazanç raporları oluşturur.',
+    'faq.q2':'Tahmini oranlar ne anlama gelir?',
+    'faq.a2':'4.2× oranı, atınız kazanırsa 1€ için yaklaşık 4,20€ geri alacağınız anlamına gelir. Bunlar YZ tahminleridir — gerçek PMU oranları diğer oyuncuların bahislerine göre değişir.',
+    'faq.q3':'Yarışlar arasında nasıl gezinirim?',
+    'faq.a3':'Toplantıyı (hipodrom) değiştirmek için R1, R2, R3... üzerine tıklayın. Altında C1, C2, C3... yarışları görünür. Tahminlerini görmek için bir yarışa tıklayın. Arama çubuğu yarışları hızlıca bulmanızı sağlar.',
+    'faq.q4':'Quinté+ nedir?',
+    'faq.a4':'Quinté+, günün öne çıkan yarışıdır (listede altın nokta). YZ, daha fazla seçilmiş at ve ek Quinté+ raporlarıyla ona öncelikli bir analiz ayırır.',
+    'faq.q5':'Tahminler garanti midir?',
+    'faq.a5':'Hayır. Tahminler yalnızca bilgilendirme amaçlıdır. Yarışlar bir öngörülemezlik unsuru içerir. Sorumlu oynayın ve asla kaybetmeyi göze alabileceğinizden fazlasını bahis olarak koymayın.',
+    'faq.q6':'Tahminler ne zaman yayınlanır?',
+    'faq.a6':'YZ ajanı, resmi program yayınlandıktan sonra sabah erken saatlerde (7–9 arası) tahminleri oluşturur. Her yarışın kalkışına kadar mevcut kalırlar.',
+    'faq.q7':'Aboneliğimi nasıl iptal ederim?',
+    'faq.a7':'Abone alanınızdan istediğiniz zaman iptal edin. Erişim, ek ücret olmaksızın ödenen dönemin sonuna kadar aktif kalır.',
+    'faq.q8':'Ödeme güvenli mi?',
+    'faq.a8':'Evet. Ödemeler SSL şifreli Stripe tarafından işlenir. Banka bilgilerinizi asla saklamayız.',
+    'sidebar.subscriber':'Aktif abone',
+    'sidebar.access':'Sınırsız erişim',
+    'sidebar.search':'Yarış ara...',
+    'sidebar.loading':'Günlük program yükleniyor...',
+    'main.selectCourse':'Bir yarış seçin',
+    'main.departure':'Kalkış',
+    'main.quinteAnalysis':"★ Günün Quinté+'ı — Öncelikli Analiz",
+    'main.aiAnalyzing':'YZ yarışı analiz ediyor...',
+    'main.aiGenerating':'🤖 YZ tahminleri oluşturuyor...',
+    'main.selectionLabel':'YZ Seçimi — Atların numaraları',
+    'main.reportsLabel':'Tahmini kazanç raporları',
+    'main.analysisLabel':'YZ Analizi',
+    'main.dossard':'No',
+    'main.favourite':'★ YZ Favorisi',
+    'main.odds':'Oran:',
+    'main.nonPartant':'⚠ İlan edilen katılmayan atlar',
+    'main.starters':'{n} yarışmacı',
+    'main.terrain':'Zemin: {t}',
+    'main.programmeLoaded':'✓ Günlük PMU programı yüklendi',
+    'reports.winner':'Kazanan',
+    'reports.place':'Yer',
+    'reports.quinte':'Quinté+',
+    'reports.quinteOrder':'Quinté Sırası',
+    'alert.subscriber':"✅ Aktif abonelik\n\n📅 Yenileme: her ayın 8'i\n💳 9,90€/ay — Güvenli Stripe\n\nAboneliğinizi yönetmek için destek ile iletişime geçin.",
+    'alert.stripe':'Stripe ödemesine yönlendiriliyor...\n\n9,90€/ay — Taahhütsüz\nSSL güvenli ödeme',
+    'fallback.analyse':'Son performanslara ve bugünün koşullarına göre YZ tarafından oluşturulan tahminler.'
+  }
+};
+
+let currentLang = localStorage.getItem('ph_lang') || 'fr';
+
+function t(key, params = {}) {
+  const val = (i18n[currentLang] && i18n[currentLang][key]) || (i18n.fr[key]) || key;
+  return val.replace(/\{(\w+)\}/g, (_, k) => (params[k] !== undefined ? params[k] : '{' + k + '}'));
+}
+
+function applyLang() {
+  const lang = LANGS[currentLang];
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = lang.dir;
+
+  // Update all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  // Update placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+
+  // Update IDs-based elements (complex content)
+  const trialTitle = document.getElementById('i18n-trial-title');
+  if (trialTitle) trialTitle.textContent = t('expired.title');
+  const trialDesc = document.getElementById('i18n-trial-desc');
+  if (trialDesc) trialDesc.textContent = t('expired.desc');
+  const planLabel = document.getElementById('i18n-plan-label');
+  if (planLabel) planLabel.textContent = t('expired.plan');
+  const perMonth = document.getElementById('i18n-per-month');
+  if (perMonth) perMonth.textContent = t('expired.perMonth');
+  const ctaBtn = document.getElementById('i18n-cta-btn');
+  if (ctaBtn) ctaBtn.textContent = t('expired.cta');
+  const secure = document.getElementById('i18n-secure');
+  if (secure) secure.textContent = t('expired.secure');
+
+  // Update nav date
+  const now = new Date();
+  const navDateEl = document.getElementById('navDate');
+  if (navDateEl) {
+    navDateEl.textContent = now.toLocaleDateString(lang.locale, {weekday:'long', day:'numeric', month:'long'}).toUpperCase();
+  }
+
+  // Update trial banner
+  updateTrialBanner();
+
+  // Update sidebar trial label if in trial
+  const status = getTrialStatus();
+  const subBadge = document.querySelector('.sub-label');
+  if (subBadge && status === 'trial') {
+    subBadge.textContent = t('trial.remaining', {time: getTrialDaysLeft()});
+    subBadge.style.color = '#E8C96A';
+  }
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('ph_lang', lang);
+
+  // Update selector display
+  const langInfo = LANGS[lang];
+  document.getElementById('langFlag').textContent = langInfo.flag;
+  document.getElementById('langName').textContent = langInfo.name;
+  document.querySelectorAll('.lang-option').forEach(el =>
+    el.classList.toggle('active', el.dataset.lang === lang)
+  );
+  document.getElementById('langSelector').classList.remove('open');
+
+  // Apply translations to all static elements
+  applyLang();
+
+  // Rebuild dynamic content
+  if (REUNIONS.length) {
+    buildTabs();
+    buildNav();
+    // Re-render active course if any
+    const activeItem = document.querySelector('.course-item.active');
+    if (activeItem) {
+      const parts = activeItem.id.split('-');
+      const rid = parts[1], cid = parts[2];
+      const reunion = REUNIONS.find(r => r.id === rid);
+      const course = reunion?.courses.find(c => c.id === cid);
+      if (course) {
+        const key = rid + '-' + cid;
+        if (cache[key]) render(cache[key], course.quinte);
+      }
+    }
+  }
+}
+
+function toggleLangDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('langSelector').classList.toggle('open');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('langSelector').classList.remove('open');
+});
+
 // ── DONNÉES RÉUNIONS ──
-// Suppression silencieuse des erreurs non critiques
 const _cw = console.warn; const _ce = console.error;
 console.warn = (...a) => { if(!a[0]?.toString().includes('PMU')&&!a[0]?.toString().includes('fallback')) _cw(...a); };
 console.error = (...a) => { if(!a[0]?.toString().includes('fetch')&&!a[0]?.toString().includes('JSON')) _ce(...a); };
 
-let REUNIONS = []; // Chargé dynamiquement depuis le web
+let REUNIONS = [];
 const cache = {};
 let activeR = null;
 
@@ -463,11 +1096,12 @@ function getTrialStatus() {
 function getTrialDaysLeft() {
   const installed = parseInt(localStorage.getItem('ph_installed') || Date.now());
   const hoursLeft = Math.max(0, 48 - (Date.now() - installed) / (1000 * 60 * 60));
-  return hoursLeft > 24 ? `${Math.ceil(hoursLeft/24)} jour(s)` : `${Math.ceil(hoursLeft)}h`;
+  if (hoursLeft > 24) return t('trial.daysLeft', {n: Math.ceil(hoursLeft / 24)});
+  return t('trial.hoursLeft', {n: Math.ceil(hoursLeft)});
 }
 
 function activateSubscription() {
-  alert('Redirection vers le paiement Stripe...\n\n9,90€/mois — Sans engagement\nPaiement sécurisé SSL');
+  alert(t('alert.stripe'));
   localStorage.setItem('ph_subscribed', 'true');
   location.reload();
 }
@@ -481,13 +1115,15 @@ function updateTrialBanner() {
   const status = getTrialStatus();
   const banner = document.getElementById('trialBanner');
   if (status === 'trial') {
+    const bannerText = t('trial.bannerText', {time: getTrialDaysLeft()})
+      .replace(/([\d]+\s*\w+)(?=\s*[)\.]|$)/, '<strong>$&</strong>');
     banner.style.display = 'flex';
     banner.innerHTML = `
       <span style="font-family:'DM Mono',monospace;font-size:0.65rem;letter-spacing:0.08em;color:var(--gold);">
-        ⏳ Essai gratuit — Il vous reste <strong>${getTrialDaysLeft()}</strong>
+        ${t('trial.bannerText').replace('{time}', '<strong>' + getTrialDaysLeft() + '</strong>')}
       </span>
       <button onclick="activateSubscription()" style="background:var(--gold);color:var(--dark);border:none;padding:5px 14px;font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.1em;cursor:pointer;font-weight:600;">
-        S'abonner — 9,90€/mois
+        ${t('trial.subscribe')}
       </button>`;
   } else {
     banner.style.display = 'none';
@@ -496,7 +1132,6 @@ function updateTrialBanner() {
 
 // ── CHARGEMENT PROGRAMME PMU ──
 async function loadProgramme() {
-  // Affichage immédiat
   REUNIONS = getProgrammeFallback();
   buildTabs(); buildNav();
   selectReunion(REUNIONS[0].id);
@@ -504,7 +1139,6 @@ async function loadProgramme() {
   document.getElementById('programmeLoading').style.display = 'none';
 
   try {
-    // Appel à notre API Vercel côté serveur
     const resp = await fetch('/api/programme', { signal: AbortSignal.timeout(8000) });
     if (!resp.ok) throw new Error('API error');
     const data = await resp.json();
@@ -517,7 +1151,7 @@ async function loadProgramme() {
 
     const badge = document.createElement('div');
     badge.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#3D8A5E;color:#fff;padding:8px 16px;font-family:DM Mono,monospace;font-size:0.62rem;letter-spacing:0.1em;z-index:9999;';
-    badge.textContent = '✓ Programme PMU du jour chargé';
+    badge.textContent = t('main.programmeLoaded');
     document.body.appendChild(badge);
     setTimeout(() => badge.remove(), 3000);
 
@@ -526,12 +1160,10 @@ async function loadProgramme() {
 
 function formatHeure(ts) {
   try {
-    // PMU renvoie parfois un timestamp en ms
     if (typeof ts === 'number') {
       const d = new Date(ts);
       return `${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
     }
-    // Ou une string "HH:MM"
     return ts.replace(':','h').slice(0,5);
   } catch { return '--h--'; }
 }
@@ -569,21 +1201,24 @@ function getProgrammeFallback() {
 
 // ── INIT ──
 function init() {
+  // Init lang selector display
+  const langInfo = LANGS[currentLang];
+  document.getElementById('langFlag').textContent = langInfo.flag;
+  document.getElementById('langName').textContent = langInfo.name;
+  document.querySelectorAll('.lang-option').forEach(el =>
+    el.classList.toggle('active', el.dataset.lang === currentLang)
+  );
+
   const status = getTrialStatus();
-  if (status === 'expired') { showExpiredScreen(); return; }
-
-  const now = new Date();
-  document.getElementById('navDate').textContent =
-    now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}).toUpperCase();
-
-  const subBadge = document.querySelector('.sub-label');
-  if (subBadge && status === 'trial') {
-    subBadge.textContent = `Essai gratuit — ${getTrialDaysLeft()} restant(s)`;
-    subBadge.style.color = '#E8C96A';
+  if (status === 'expired') {
+    applyLang();
+    showExpiredScreen();
+    return;
   }
 
+  applyLang();
   updateTrialBanner();
-  loadProgramme(); // Charge le vrai programme du jour
+  loadProgramme();
 }
 
 // ── TABS ──
@@ -639,11 +1274,14 @@ function selectCourse(rid, cid) {
   document.getElementById('dTitle').textContent = (course.nom || 'Course') + ' · ' + (reunion.hippodrome || reunion.hipp || '');
   document.getElementById('dTime').textContent = course.heure || '--h--';
   document.getElementById('dMeta').innerHTML = [
-    course.type, course.dist, course.part+' partants', 'Terrain : '+course.terrain
-  ].map(m=>`<div class="meta-chip">${m}</div>`).join('');
+    course.type,
+    course.dist,
+    t('main.starters', {n: course.part}),
+    t('main.terrain', {t: course.terrain})
+  ].map(m => `<div class="meta-chip">${m}</div>`).join('');
   document.getElementById('quinteBadge').style.display = course.quinte ? 'block' : 'none';
 
-  const key = rid+'-'+cid;
+  const key = rid + '-' + cid;
   if (cache[key]) {
     render(cache[key], course.quinte);
   } else {
@@ -657,9 +1295,8 @@ function selectCourse(rid, cid) {
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
-  updateLoadingText("🤖 L'IA génère les pronostics...");
+  updateLoadingText(t('main.aiGenerating'));
 
-  // Si on a les vrais partants depuis l'API PMU, on les utilise
   const partantsReels = (course.partantsData || [])
     .filter(p => !p.nonPartant)
     .slice(0, 18);
@@ -668,9 +1305,11 @@ async function generate(course, key) {
     ? `Partants officiels : ${partantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}`
     : `Nombre de partants : ${n}. Invente des noms de chevaux réalistes.`;
 
+  const langNote = currentLang !== 'fr' ? `\nWrite the "analyse" field in language code: ${currentLang}.` : '';
+
   const prompt = `Expert PMU. Génère pronostics pour : ${course.nom} — ${course.type} ${course.dist} — Terrain: ${course.terrain}.
 ${infoPartants}
-${isQ ? 'Course Quinté+.' : ''}
+${isQ ? 'Course Quinté+.' : ''}${langNote}
 
 IMPORTANT: Réponds avec SEULEMENT ce JSON, rien avant, rien après:
 {"selection":[{"num":7,"nom":"CHEVAL","jockey":"P. Nom","age":"5 ans","favori":true,"non_partant":false,"cote":"4.2"},{"num":3,"nom":"CHEVAL2","jockey":"E. Nom","age":"6 ans","favori":false,"non_partant":false,"cote":"6.5"}],"rapports":{"gagnant":"4.2x","place":"1.8x"${isQ ? ',"quinte":"180x","quinte_ordre":"2500x"' : ''}},"analyse":"Analyse courte."}
@@ -694,14 +1333,9 @@ IMPORTANT: Réponds avec SEULEMENT ce JSON, rien avant, rien après:
     if (data.error) throw new Error(data.error.message);
 
     const txt = data.content.filter(b => b.type === "text").map(b => b.text).join('');
-
-    // Parsing ultra-robuste : on essaie plusieurs stratégies
     let result = null;
 
-    // Stratégie 1 : JSON direct
     try { result = JSON.parse(txt.trim()); } catch(e1) {}
-
-    // Stratégie 2 : extraire entre { et }
     if (!result) {
       try {
         const start = txt.indexOf('{');
@@ -709,8 +1343,6 @@ IMPORTANT: Réponds avec SEULEMENT ce JSON, rien avant, rien après:
         if (start !== -1 && end !== -1) result = JSON.parse(txt.slice(start, end+1));
       } catch(e2) {}
     }
-
-    // Stratégie 3 : regex pour extraire le JSON
     if (!result) {
       try {
         const m = txt.match(/\{"selection"[\s\S]*?"analyse"\s*:\s*"[^"]*"\s*\}/);
@@ -724,7 +1356,6 @@ IMPORTANT: Réponds avec SEULEMENT ce JSON, rien avant, rien après:
     render(result, isQ);
 
   } catch(e) {
-    
     const fb = fallback(n, isQ, course.partantsData);
     cache[key] = fb;
     render(fb, isQ);
@@ -741,27 +1372,21 @@ function render(data, isQ) {
   document.getElementById('loadingWrap').style.display = 'none';
   document.getElementById('pronoBlock').classList.add('active');
 
-  // BANNIÈRE TEMPS RÉEL
   const rt = data.donnees_temps_reel;
   let rtHtml = '';
   if (rt) {
     const alerts = [];
     if (rt.retard && rt.retard_minutes > 0)
-      alerts.push(`⏱ Retard de ${rt.retard_minutes} min`);
-    if (rt.terrain_actuel)
-      alerts.push(`🌱 Terrain : ${rt.terrain_actuel}`);
-    if (rt.meteo)
-      alerts.push(`🌤 ${rt.meteo}`);
-    if (rt.source)
-      alerts.push(`📡 Source : ${rt.source}`);
-
+      alerts.push(`⏱ ${t('main.terrain', {t: ''}).replace(': ','').trim()} +${rt.retard_minutes} min`);
+    if (rt.terrain_actuel) alerts.push(`🌱 ${rt.terrain_actuel}`);
+    if (rt.meteo) alerts.push(`🌤 ${rt.meteo}`);
+    if (rt.source) alerts.push(`📡 ${rt.source}`);
     rtHtml = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
       ${alerts.map(a => `<div style="background:var(--dark-3);border:1px solid var(--border);padding:5px 12px;font-family:'DM Mono',monospace;font-size:0.62rem;color:var(--cream-dim);letter-spacing:0.06em;">${a}</div>`).join('')}
     </div>`;
   }
   document.getElementById('rtBanner').innerHTML = rtHtml;
 
-  // CHEVAUX
   const partants = data.selection.filter(h => !h.non_partant);
   const nonPartants = data.selection.filter(h => h.non_partant);
 
@@ -769,7 +1394,7 @@ function render(data, isQ) {
     partants.map(h => `
       <div class="horse-card ${h.favori?'favori':''}">
         <div class="dossard ${h.favori?'favori-num':''}">
-          <div class="dossard-label">Dossard</div>
+          <div class="dossard-label">${t('main.dossard')}</div>
           <div class="dossard-num">${h.num}</div>
         </div>
         <div class="horse-info">
@@ -777,14 +1402,14 @@ function render(data, isQ) {
           <div class="horse-sub">${h.jockey ? h.jockey+' · ' : ''}${h.age||''}</div>
         </div>
         <div class="horse-right">
-          ${h.favori ? '<div class="fav-badge">★ Favori IA</div>' : ''}
-          ${h.cote ? `<div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--green-light);margin-top:4px;">Cote : ${h.cote}</div>` : ''}
+          ${h.favori ? `<div class="fav-badge">${t('main.favourite')}</div>` : ''}
+          ${h.cote ? `<div style="font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--green-light);margin-top:4px;">${t('main.odds')} ${h.cote}</div>` : ''}
         </div>
       </div>
     `).join('')
     + (nonPartants.length > 0 ? `
       <div style="margin-top:12px;padding:12px 16px;background:rgba(139,32,32,0.12);border:1px solid rgba(139,32,32,0.3);border-left:3px solid #C43030;">
-        <div style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:#C43030;margin-bottom:8px;">⚠ Non-partants déclarés</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:#C43030;margin-bottom:8px;">${t('main.nonPartant')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           ${nonPartants.map(h => `
             <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:rgba(139,32,32,0.1);border:1px solid rgba(139,32,32,0.2);">
@@ -796,9 +1421,13 @@ function render(data, isQ) {
       </div>
     ` : '');
 
-  // RAPPORTS
   const entries = Object.entries(data.rapports);
-  const labels = {gagnant:'Gagnant',place:'Placé',quinte:'Quinté+',quinte_ordre:'Quinté Ordre'};
+  const labels = {
+    gagnant: t('reports.winner'),
+    place: t('reports.place'),
+    quinte: t('reports.quinte'),
+    quinte_ordre: t('reports.quinteOrder')
+  };
   const grid = document.getElementById('rapportsGrid');
   grid.className = 'rapports-grid ' + (entries.length<=2?'r2':'r4');
   grid.innerHTML = entries.map(([k,v]) => `
@@ -808,7 +1437,6 @@ function render(data, isQ) {
     </div>
   `).join('');
 
-  // ANALYSE
   document.getElementById('analyseCard').textContent = data.analyse || '';
 }
 
@@ -827,7 +1455,7 @@ function filterCourses(q) {
 
 // ── SUBSCRIBER INFO ──
 function showSubscriberInfo() {
-  alert('✅ Abonnement actif\n\n📅 Renouvellement : le 8 de chaque mois\n💳 9,90€/mois — Stripe sécurisé\n\nPour gérer votre abonnement, contactez le support.');
+  alert(t('alert.subscriber'));
 }
 
 // ── FALLBACK ──
@@ -856,9 +1484,9 @@ function fallback(n, isQ, partantsData) {
     }));
   }
 
-  const rapports = {gagnant:"4.2x",place:"1.8x"};
+  const rapports = {gagnant:"4.2x", place:"1.8x"};
   if (isQ) { rapports.quinte="180x"; rapports.quinte_ordre="2500x"; }
-  return {selection:sel, rapports, analyse:"Pronostics générés par l'IA sur la base des performances récentes et des conditions du jour."};
+  return {selection:sel, rapports, analyse: t('fallback.analyse')};
 }
 
 init();
