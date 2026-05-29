@@ -257,12 +257,36 @@ nav {
 /* ANALYSE */
 .analyse-card { background:var(--dark-3); border:1px solid var(--border); border-left:3px solid var(--gold); padding:18px 22px; margin-bottom:28px; font-style:italic; color:var(--cream-dim); line-height:1.75; font-size:0.95rem; }
 
-/* HORSE MINI-ANALYSE */
-.horse-analyse { font-family:'DM Mono',monospace; font-size:0.57rem; color:var(--cream-dim); letter-spacing:0.03em; margin-top:5px; line-height:1.55; border-top:1px solid rgba(201,168,76,0.1); padding-top:5px; }
+/* VERDICT BADGES */
+.verdict { display:inline-block; font-family:'DM Mono',monospace; font-size:0.48rem; letter-spacing:0.14em; text-transform:uppercase; padding:2px 7px; font-weight:700; vertical-align:middle; }
+.verdict-FAVORI { background:var(--gold); color:var(--dark); }
+.verdict-DANGER { background:#D97706; color:#fff; }
+.verdict-OUTSIDER { background:#1E5490; color:#fff; }
+.verdict-INTERESSANT { background:#2A6050; color:#fff; }
+.verdict-NEUTRE,.verdict-UNKNOWN { background:var(--dark-4); color:var(--cream-dim); border:1px solid var(--border); }
+.verdict-EVITER { background:#7F1D1D; color:#fff; }
+
+/* HORSE EXPERT NOTES */
+.horse-analyse { font-family:'DM Mono',monospace; font-size:0.57rem; color:var(--cream-dim); letter-spacing:0.03em; margin-top:6px; line-height:1.55; border-top:1px solid rgba(201,168,76,0.1); padding-top:5px; }
+.horse-notes { display:flex; flex-direction:column; gap:2px; margin-top:5px; }
+.horse-note { font-family:'DM Mono',monospace; font-size:0.54rem; color:var(--cream-dim); display:flex; gap:5px; align-items:baseline; line-height:1.4; }
+.horse-note.ok { color:var(--green-light); }
+.horse-note.ko { color:#C43030; }
 
 /* COTE LIVE */
 .cote-live { font-family:'DM Mono',monospace; font-size:0.68rem; color:var(--green-light); letter-spacing:0.04em; margin-top:2px; }
 .cote-live-pmu { color:var(--gold); }
+
+/* RECOMMANDATION EXPERT */
+.reco-card { background:rgba(201,168,76,0.06); border:1px solid rgba(201,168,76,0.3); border-left:4px solid var(--gold); padding:16px 20px; margin-bottom:28px; }
+.reco-label { font-family:'DM Mono',monospace; font-size:0.54rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+.reco-text { font-size:0.92rem; line-height:1.75; color:var(--cream); }
+
+/* LOADING STEPS */
+.loading-steps { display:flex; flex-direction:column; gap:4px; margin-top:14px; max-width:280px; }
+.loading-step { font-family:'DM Mono',monospace; font-size:0.6rem; color:var(--cream-dim); letter-spacing:0.06em; display:flex; align-items:center; gap:8px; }
+.loading-step.done { color:var(--green-light); }
+.loading-step.active { color:var(--gold); }
 
 /* PALMARES */
 .palmares-block { background:var(--dark-3); border:1px solid var(--border); margin-bottom:28px; overflow:hidden; }
@@ -301,6 +325,7 @@ html[dir="rtl"] .course-item { border-left:none; border-right:3px solid transpar
 html[dir="rtl"] .course-item.active { border-right-color:var(--gold); }
 html[dir="rtl"] .analyse-card { border-left:none; border-right:3px solid var(--gold); }
 html[dir="rtl"] .conditions-card { border-left:none; border-right:3px solid var(--green-light); }
+html[dir="rtl"] .reco-card { border-left:none; border-right:4px solid var(--gold); }
 html[dir="rtl"] .modal-close { right:auto; left:18px; }
 html[dir="rtl"] .search-icon { left:auto; right:10px; }
 html[dir="rtl"] .search-input { padding:9px 32px 9px 12px; }
@@ -501,11 +526,13 @@ html[dir="rtl"] .search-input { padding:9px 32px 9px 12px; }
       <div class="loading-wrap" id="loadingWrap" style="display:none;">
         <div class="spinner"></div>
         <div class="loading-txt" data-i18n="main.aiAnalyzing">L'IA analyse la course...</div>
+        <div class="loading-steps" id="loadingSteps"></div>
       </div>
 
       <div class="prono-block" id="pronoBlock">
         <div id="rtBanner"></div>
-        <div class="block-label" data-i18n="main.selectionLabel">Sélection IA — Numéros de dossard</div>
+        <div id="recoBlock"></div>
+        <div class="block-label" data-i18n="main.selectionLabel">Sélection IA — Analyse experte</div>
         <div class="horses-grid" id="horsesGrid"></div>
         <div id="palmaresBlock"></div>
         <div class="block-label" data-i18n="main.reportsLabel">Rapports de gains estimés</div>
@@ -1396,7 +1423,8 @@ function selectCourse(rid, cid) {
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
-  updateLoadingText(t('main.aiGenerating'));
+  updateLoadingText('⟳ Agent 1 — Partants PMU...');
+  clearLoadingSteps();
 
   // Fetch real participants from PMU via proxy
   if (course.numReunion && course.numCourse && course.dateStr && !course.partantsData?.length) {
@@ -1410,9 +1438,10 @@ async function generate(course, key) {
       }
     } catch (e) { console.error('[PMU] Participants fetch error:', e.message); }
   } else {
-    console.log(`[PMU] Skip participants fetch — numReunion:${course.numReunion} numCourse:${course.numCourse} dateStr:${course.dateStr} partantsData:${course.partantsData?.length||0}`);
+    console.log(`[PMU] Skip participants — numReunion:${course.numReunion} numCourse:${course.numCourse} dateStr:${course.dateStr} partantsData:${course.partantsData?.length||0}`);
   }
 
+  updateLoadingText('⟳ Agent 2 — Cotes & historiques...');
   // Fetch cotes and career history in parallel
   const [cotesResult, carriereResult] = await Promise.allSettled([
     (async () => {
@@ -1460,45 +1489,51 @@ async function generate(course, key) {
   const hasCarriere = Object.keys(carriere).length > 0;
   const hasRealPartants = partantsReels.length > 0;
 
+  addLoadingStep('done', `✓ ${partantsReels.length} partant(s) chargés`);
+  addLoadingStep('done', `✓ Cotes ${Object.keys(cotes).length ? 'PMU' : 'estimées'}${hasCarriere ? ' — historique inclus' : ''}`);
+  addLoadingStep('active', '🤖 Analyse multi-agents en cours...');
+
   const infoPartants = hasRealPartants
     ? `PARTANTS OFFICIELS (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
       + (nonPartantsReels.length ? `\nNON-PARTANTS: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
-    : `Nombre de partants: ${n}. Crée des noms de chevaux PMU réalistes avec jockeys français/belges et musiques (ex: "1-2-0-3-1").`;
+    : `Nombre de partants: ${n}. Crée des noms de chevaux PMU réalistes avec jockeys français/belges et musiques réalistes.`;
 
   const langNote = currentLang !== 'fr'
-    ? `\nWrite the "analyse", "conditions", and per-horse "analyse" fields in language code: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
+    ? `\nIMPORTANT: Write all text fields (analyse, conditions, recommandation, jockey_note, terrain_note, distance_note) in language: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
     : '';
 
   const quinteFields = isQ ? `"quinte":[7,3,1,9,5],` : '';
   const deuxSur4Rapport = n >= 10 ? `,"2_sur_4":"8x"` : '';
   const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
 
-  const prompt = `Tu es un consultant hippique professionnel PMU avec 25 ans d'expertise. Ton rôle est de produire une analyse tranchée, précise et argumentée — comme un vrai spécialiste qui donne de vrais conseils.
+  const systemPrompt = `Tu es un expert hippique professionnel avec 20 ans d'expérience en analyse des courses PMU. Tu analyses les courses de manière détaillée et précise. Pour chaque cheval tu donnes sa forme récente chiffrée, l'analyse du jockey, l'adéquation terrain/distance, un avis tranché. Tu donnes des pronostics clairs et argumentés comme un vrai consultant hippique. Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
 
-━━━ COURSE: ${course.nom} ━━━
-Type: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain}${isQ ? ' | ⭐ QUINTÉ+' : ''}${hasCarriere ? ' | Historique carrière fourni' : ''}
+  const prompt = `Analyse experte de cette course PMU:
+
+COURSE: ${course.nom}
+Type: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain}${isQ ? ' | ⭐ QUINTÉ+' : ''}
 
 ${infoPartants}
 ${langNote}
 
-STYLE REQUIS pour le champ "analyse" de chaque cheval — exemples de bon niveau:
-• "RAFFIN en grande forme, 3 victoires sur ses 5 dernières sur ${course.dist}, parfaitement adapté à ce terrain — FAVORI LOGIQUE"
-• "Attention, BARRIER n'a jamais couru sur terrain souple, sa musique montre une méforme récente (0-0-0) — À ÉVITER"
-• "OUTSIDER DANGEREUX : cote attractive, musique en progression, jockey performant sur cette piste"
+Génère une analyse de niveau consultant professionnel. Chaque cheval doit avoir:
+- "verdict": "FAVORI" | "DANGER" | "OUTSIDER" | "INTERESSANT" | "EVITER" | "NEUTRE"
+- "jockey_note": évaluation du jockey (forme récente, % victoires estimé, adéquation course)
+- "terrain_note": adéquation terrain (commence par "✓" si favorable, "✗" si défavorable)
+- "distance_note": adéquation distance (commence par "✓" si favorable, "✗" si défavorable)
+- "analyse": 2-3 phrases expertes avec le nom du jockey cité, lecture musique, avis tranché
+- "cote": estimation réaliste (favori: 2-5, second: 5-10, outsider: 10-30)
+- "confiance": 0-100
 
-Réponds UNIQUEMENT avec ce JSON valide (rien avant, rien après):
-{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"4.5","analyse":"Analyse experte 2-3 phrases avec jockey nommé, avis sur forme+terrain+distance+cote. Conclure par: FAVORI / OUTSIDER DANGEREUX / INTÉRESSANT / À ÉVITER","confiance":72}],"classement":[N1,N2,N3,N4,N5],"couple":[N1,N2],${quinteFields}"rapports":{"gagnant":"4.5x","place":"1.9x","couple":"14x"${deuxSur4Rapport}${quinteRapports}},"analyse":"Recommandation claire: quel cheval jouer en GAGNANT et pourquoi. Top 3 argumenté. 3-4 phrases.","conditions":"Impact terrain/distance/discipline sur cette course: qui en profite, qui est pénalisé."}
+Réponds UNIQUEMENT avec ce JSON valide:
+{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"4.5","confiance":72,"verdict":"OUTSIDER","jockey_note":"Jockey régulier, 18% de victoires sur cette distance","terrain_note":"✓ Terrain idéal pour ce cheval","distance_note":"✓ 2 victoires récentes sur cette distance","analyse":"Analyse experte 2-3 phrases avec lecture musique et avis tranché."}],"classement":[N1,N2,N3,N4,N5],"couple":[N1,N2],${quinteFields}"rapports":{"gagnant":"4.5x","place":"1.9x","couple":"14x"${deuxSur4Rapport}${quinteRapports}},"recommandation":"GAGNANT: Jouer N°X avec confiance car [raison]. COUPLÉ: N°X-Y. TOP 3: N°X > N°Y > N°Z.","analyse":"Analyse globale experte 3-4 phrases avec recommandation claire.","conditions":"Impact terrain/distance sur cette course: qui en profite, qui est pénalisé."}
 
-RÈGLES OBLIGATOIRES:
-1. selection: TOUS les partants par ordre de numéro (non-partants → non_partant:true, confiance:0, cote:null)
-2. cote OBLIGATOIRE pour chaque partant actif — estimation réaliste (favori≈2-5, second≈6-10, outsider≈12-30)
-3. analyse par cheval: 2-3 phrases AVEC le nom du jockey, évaluation musique, terrain, distance + label final
-4. favori:true pour UN SEUL cheval (le plus probable)
-5. confiance: favori 75-90 | 2ème/3ème 50-74 | outsiders 20-49 | non-partants 0
-6. classement: top 5 numéros du plus probable au moins probable
-7. couple: les 2 meilleurs numéros${isQ ? '\n8. quinte: top 5 dans l\'ordre' : ''}
-8. rapports: estimés réalistes selon nombre de partants (${n} partants)
-9. JSON VALIDE UNIQUEMENT — aucun texte avant ou après le JSON`;
+RÈGLES:
+- selection: TOUS les partants par numéro croissant (non-partants: non_partant:true, confiance:0, cote:null, verdict:"NEUTRE")
+- favori:true pour UN SEUL cheval
+- classement: top 5 numéros${isQ ? ', couple, quinte: top 5 dans l\'ordre' : ', couple'}
+- rapports: gains estimés réalistes pour ${n} partants
+- JSON VALIDE UNIQUEMENT`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1506,7 +1541,8 @@ RÈGLES OBLIGATOIRES:
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        max_tokens: 5000,
+        system: systemPrompt,
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -1545,6 +1581,10 @@ RÈGLES OBLIGATOIRES:
           non_partant: p.nonPartant,
           cote: ai.cote || (ai.confiance ? (100/Math.max(ai.confiance,5)*1.5).toFixed(1) : null),
           cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
+          verdict: p.nonPartant ? 'NEUTRE' : (ai.verdict || null),
+          jockey_note: ai.jockey_note || null,
+          terrain_note: ai.terrain_note || null,
+          distance_note: ai.distance_note || null,
           analyse: ai.analyse || null,
           confiance: p.nonPartant ? 0 : (ai.confiance || null),
         };
@@ -1561,11 +1601,12 @@ RÈGLES OBLIGATOIRES:
         favoris.forEach(h => { if ((h.confiance||0) < maxC) h.favori = false; });
       }
     } else {
-      // No real participants — merge PMU cotes and ensure cote field exists
+      // No real participants — merge PMU cotes and ensure cote/verdict fields exist
       result.selection = (result.selection || []).map(h => ({
         ...h,
         cote: h.cote || (h.confiance ? (100/Math.max(h.confiance,5)*1.5).toFixed(1) : null),
-        cotePmu: cotes[h.num] ? String(cotes[h.num]) : null
+        cotePmu: cotes[h.num] ? String(cotes[h.num]) : null,
+        verdict: h.non_partant ? 'NEUTRE' : (h.verdict || null),
       }));
     }
 
@@ -1599,11 +1640,34 @@ function updateLoadingText(msg) {
   if (el) el.textContent = msg;
 }
 
+function addLoadingStep(type, text) {
+  const el = document.getElementById('loadingSteps');
+  if (!el) return;
+  const d = document.createElement('div');
+  d.className = `loading-step ${type}`;
+  d.textContent = text;
+  el.appendChild(d);
+}
+
+function clearLoadingSteps() {
+  const el = document.getElementById('loadingSteps');
+  if (el) el.innerHTML = '';
+}
+
 // ── RENDER ──
 function render(data, isQ) {
   document.getElementById('loadingWrap').style.display = 'none';
   document.getElementById('pronoBlock').classList.add('active');
   document.getElementById('rtBanner').innerHTML = '';
+
+  // ── Recommandation expert ──
+  const recoEl = document.getElementById('recoBlock');
+  recoEl.innerHTML = data.recommandation
+    ? `<div class="reco-card">
+        <div class="reco-label">★ Recommandation expert</div>
+        <div class="reco-text">${data.recommandation}</div>
+      </div>`
+    : '';
 
   const partants = data.selection.filter(h => !h.non_partant);
   const nonPartants = data.selection.filter(h => h.non_partant);
@@ -1618,6 +1682,17 @@ function render(data, isQ) {
         ? (h.cotePmu
           ? `<div class="cote-live" style="opacity:0.45;font-size:0.58rem;">IA ${h.cote}</div>`
           : `<div class="cote-live">~ ${h.cote}</div>`)
+        : '';
+      const verdictBadge = (h.verdict && h.verdict !== 'NEUTRE' && h.verdict !== 'UNKNOWN' && !h.non_partant)
+        ? `<span class="verdict verdict-${h.verdict}">${h.verdict}</span>`
+        : '';
+      const noteClass = txt => txt && txt.startsWith('✓') ? 'ok' : txt && txt.startsWith('✗') ? 'ko' : '';
+      const expertNotes = (h.jockey_note || h.terrain_note || h.distance_note)
+        ? `<div class="horse-notes">
+            ${h.jockey_note ? `<div class="horse-note"><span>👤</span><span>${h.jockey_note}</span></div>` : ''}
+            ${h.terrain_note ? `<div class="horse-note ${noteClass(h.terrain_note)}"><span>🏇</span><span>${h.terrain_note}</span></div>` : ''}
+            ${h.distance_note ? `<div class="horse-note ${noteClass(h.distance_note)}"><span>📏</span><span>${h.distance_note}</span></div>` : ''}
+          </div>`
         : '';
       const analyseHorse = h.analyse
         ? `<div class="horse-analyse">${h.analyse}</div>`
@@ -1636,8 +1711,9 @@ function render(data, isQ) {
           <div class="dossard-num">${h.num}</div>
         </div>
         <div class="horse-info">
-          <div class="horse-name">${h.nom}</div>
+          <div class="horse-name">${h.nom} ${verdictBadge}</div>
           <div class="horse-sub">${h.jockey ? h.jockey+' · ' : ''}${h.age||''}</div>
+          ${expertNotes}
           ${analyseHorse}
           ${confBar}
         </div>
