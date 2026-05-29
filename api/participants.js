@@ -23,12 +23,15 @@ export default async function handler(req, res) {
     const participants = data.participants.map(p => ({
       numPmu: p.numPmu,
       nom: p.nom,
+      chevalId: p.cheval?.id || p.idCheval || null,
       driver: p.driver || '',
+      driverId: p.driverChange?.idDriver || p.idDriver || null,
       entraineur: p.entraineur || '',
       age: p.age,
       sexe: p.sexe,
       musique: p.musique || '',
       nonPartant: p.statut === 'NON_PARTANT',
+      indiceCote: p.indiceCote || null,
     }));
 
     res.json({ success: true, participants });

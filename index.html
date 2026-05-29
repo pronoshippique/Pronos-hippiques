@@ -248,7 +248,8 @@ nav {
 /* RAPPORTS */
 .rapports-grid { display:grid; gap:10px; margin-bottom:28px; }
 .rapports-grid.r2 { grid-template-columns:1fr 1fr; }
-.rapports-grid.r4 { grid-template-columns:1fr 1fr 1fr 1fr; }
+.rapports-grid.r4 { grid-template-columns:repeat(4,1fr); }
+.rapports-grid.r6 { grid-template-columns:repeat(3,1fr); }
 .rapport-card { background:var(--dark-3); border:1px solid var(--border); padding:18px; text-align:center; }
 .rapport-lbl { font-family:'DM Mono',monospace; font-size:0.57rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--cream-dim); margin-bottom:8px; }
 .rapport-val { font-family:'Playfair Display',serif; font-size:1.9rem; color:var(--green-light); font-weight:700; line-height:1; }
@@ -1402,26 +1403,54 @@ async function generate(course, key) {
     } catch (_) {}
   }
 
-  // Fetch real PMU cotes (live odds)
-  if (course.numReunion && course.numCourse && course.dateStr && !course.cotesData) {
-    try {
-      const cResp = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
-      const cData = await cResp.json();
-      course.cotesData = cData.success ? cData.cotes : {};
-    } catch (_) { course.cotesData = {}; }
-  }
+  // Fetch cotes and career history in parallel
+  const [cotesResult, carriereResult] = await Promise.allSettled([
+    // Live PMU cotes
+    (async () => {
+      if (!course.numReunion || !course.numCourse || !course.dateStr || course.cotesData) return course.cotesData || {};
+      const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
+      const d = await r.json();
+      return d.success ? d.cotes : {};
+    })(),
+    // Career history for participants with known IDs
+    (async () => {
+      if (course.carriereData) return course.carriereData;
+      const ids = (course.partantsData || [])
+        .map(p => p.chevalId).filter(Boolean);
+      if (!ids.length) return {};
+      const r = await fetch(`/api/carriere?ids=${ids.join(',')}`);
+      const d = await r.json();
+      return d.success ? d.carriere : {};
+    })(),
+  ]);
+
+  course.cotesData = cotesResult.status === 'fulfilled' ? cotesResult.value : {};
+  course.carriereData = carriereResult.status === 'fulfilled' ? carriereResult.value : {};
 
   const cotes = course.cotesData || {};
+  const carriere = course.carriereData || {};
   const partantsReels = (course.partantsData || []).filter(p => !p.nonPartant).slice(0, 18);
   const nonPartantsReels = (course.partantsData || []).filter(p => p.nonPartant);
 
-  const buildPartantLine = p => {
-    const cote = cotes[p.numPmu] ? ` — Cote: ${cotes[p.numPmu]}` : '';
-    const driver = p.driver ? ` — Driver/Jockey: ${p.driver}` : '';
-    const musique = p.musique ? ` — Musique: ${p.musique}` : '';
-    return `N°${p.numPmu} ${p.nom}${driver}${musique}${cote}`;
+  const buildCarriereResume = (p) => {
+    const hist = carriere[p.chevalId];
+    if (!hist || !hist.length) return '';
+    const lines = hist.slice(0, 5).map(c => {
+      const pos = c.position ? `${c.position}e/${c.nombrePartants||'?'}` : 'NC';
+      return `${c.date?.slice(0,10)||''} ${c.hippodrome||''} ${c.discipline||''} ${c.distance||''} → ${pos}${c.terrain?' ('+c.terrain+')':''}`;
+    });
+    return ` — Dernières courses: [${lines.join(' | ')}]`;
   };
 
+  const buildPartantLine = p => {
+    const cote = cotes[p.numPmu] ? ` — Cote PMU: ${cotes[p.numPmu]}` : (p.indiceCote ? ` — Cote: ${p.indiceCote}` : '');
+    const driver = p.driver ? ` — Jockey/Driver: ${p.driver}` : '';
+    const musique = p.musique ? ` — Musique: ${p.musique}` : '';
+    const hist = buildCarriereResume(p);
+    return `N°${p.numPmu} ${p.nom}${driver}${musique}${cote}${hist}`;
+  };
+
+  const hasCarriere = Object.keys(carriere).length > 0;
   const infoPartants = partantsReels.length > 0
     ? `Partants (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
     + (nonPartantsReels.length ? `\nNon-partants: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
@@ -1433,26 +1462,29 @@ async function generate(course, key) {
 
   const quinteFields = isQ ? `"quinte":[7,3,1,9,5],` : '';
   const quinteRapports = isQ ? `,"quinte":"180x","quinte_ordre":"2500x"` : '';
+  const carriereNote = hasCarriere
+    ? '\nHistorique des 5 dernières courses fourni pour chaque cheval. Analyse les performances passées (positions, terrain, distance, discipline) pour évaluer la forme réelle.'
+    : '';
 
-  const prompt = `Tu es un expert PMU. Génère une analyse complète et détaillée pour cette course :
+  const prompt = `Tu es un expert PMU chevronné. Génère une analyse complète basée sur les données réelles pour cette course :
 
 COURSE: ${course.nom}
 TYPE: ${course.type} | DISTANCE: ${course.dist} | TERRAIN: ${course.terrain}
 ${isQ ? '⭐ COURSE QUINTÉ+' : ''}
 ${infoPartants}
-${langNote}
+${carriereNote}${langNote}
 
 Réponds UNIQUEMENT avec ce JSON valide (rien avant, rien après) :
-{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"7.5","analyse":"Forme récente et atouts en 1-2 phrases."}],"classement":[7,3,1,9,5],"couple":[7,3],"quarte":[7,3,1,9],${quinteFields}"rapports":{"gagnant":"4.2x","place":"1.8x","couple":"12x","quarte":"85x"${quinteRapports}},"analyse":"Analyse générale de la course en 2-3 phrases.","conditions":"Commentaire sur le terrain, la distance et la discipline en 1-2 phrases."}
+{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"7.5","analyse":"Analyse basée sur historique réel: forme, terrain, distance. 1-2 phrases.","confiance":75}],"classement":[7,3,1,9,5],"couple":[7,3],"quarte":[7,3,1,9],${quinteFields}"rapports":{"gagnant":"4.2x","place":"1.8x","couple":"12x","quarte":"85x"${quinteRapports}},"analyse":"Analyse générale 2-3 phrases basée sur les données.","conditions":"Commentaire terrain/distance/discipline 1-2 phrases."}
 
 RÈGLES STRICTES:
-- selection: TOUS les partants dans l'ordre des numéros de dossard (inclure non-partants avec non_partant:true)
-- Pour chaque cheval: analyse 1-2 phrases sur sa forme récente, ses atouts, ses faiblesses
-- Si cotes PMU fournies, utilise-les dans le champ "cote"; sinon estime
+- selection: TOUS les partants dans l'ordre des numéros de dossard (inclure non-partants avec non_partant:true, confiance:0)
+- analyse par cheval: basée sur historique réel si fourni (musique + dernières courses), sinon estimation
+- confiance: 0-100, niveau de confiance pour ce cheval (basé sur forme, terrain, distance, cote)
+- cote: utilise la cote PMU si fournie, sinon estime
 - favori:true pour le meilleur potentiel seulement
 - classement: top 5 numéros du plus probable au moins probable (non-partants exclus)
-- couple: [1er, 2ème] numéros
-- quarte: [1er, 2ème, 3ème, 4ème] numéros${isQ ? '\n- quinte: [1er, 2ème, 3ème, 4ème, 5ème] numéros' : ''}
+- couple: [1er, 2ème] — quarte: [1er…4ème]${isQ ? ' — quinte: [1er…5ème]' : ''}
 - rapports: gains estimés réalistes selon le nombre de partants
 - JSON VALIDE UNIQUEMENT, pas de commentaires`;
 
@@ -1527,6 +1559,14 @@ function render(data, isQ) {
       const analyseHorse = h.analyse
         ? `<div class="horse-analyse">${h.analyse}</div>`
         : '';
+      const confBar = (h.confiance != null && !h.non_partant)
+        ? `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+            <div style="flex:1;height:3px;background:var(--dark-4);border-radius:2px;overflow:hidden;">
+              <div style="width:${h.confiance}%;height:100%;background:${h.confiance>=70?'var(--green-light)':h.confiance>=40?'var(--gold)':'#C43030'};transition:width 0.4s;"></div>
+            </div>
+            <span style="font-family:'DM Mono',monospace;font-size:0.52rem;color:var(--cream-dim);letter-spacing:0.04em;">${h.confiance}%</span>
+          </div>`
+        : '';
       return `<div class="horse-card ${h.favori?'favori':''}">
         <div class="dossard ${h.favori?'favori-num':''}">
           <div class="dossard-label">${t('main.dossard')}</div>
@@ -1536,6 +1576,7 @@ function render(data, isQ) {
           <div class="horse-name">${h.nom}</div>
           <div class="horse-sub">${h.jockey ? h.jockey+' · ' : ''}${h.age||''}</div>
           ${analyseHorse}
+          ${confBar}
         </div>
         <div class="horse-right">
           ${h.favori ? `<div class="fav-badge">${t('main.favourite')}</div>` : ''}
@@ -1598,7 +1639,7 @@ function render(data, isQ) {
     quinte_ordre: t('reports.quinteOrder')
   };
   const grid = document.getElementById('rapportsGrid');
-  grid.className = 'rapports-grid ' + (entries.length <= 2 ? 'r2' : 'r4');
+  grid.className = 'rapports-grid ' + (entries.length <= 2 ? 'r2' : entries.length >= 6 ? 'r6' : 'r4');
   grid.innerHTML = entries.map(([k,v]) => `
     <div class="rapport-card">
       <div class="rapport-lbl">${labels[k]||k}</div>
