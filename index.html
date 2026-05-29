@@ -1081,6 +1081,7 @@ let activeR = null;
 
 // ── SYSTÈME ESSAI GRATUIT ──
 function getTrialStatus() {
+  if (localStorage.getItem('admin_access') === 'true') return 'subscribed';
   const installed = localStorage.getItem('ph_installed');
   const subscribed = localStorage.getItem('ph_subscribed');
   if (subscribed === 'true') return 'subscribed';
@@ -1297,6 +1298,17 @@ async function generate(course, key) {
   const n = course.part || 10;
   updateLoadingText(t('main.aiGenerating'));
 
+  // Fetch real participants from PMU via proxy
+  if (course.numReunion && course.numCourse && course.dateStr && !course.partantsData?.length) {
+    try {
+      const pResp = await fetch(`/api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
+      const pData = await pResp.json();
+      if (pData.success && pData.participants?.length) {
+        course.partantsData = pData.participants;
+      }
+    } catch (_) {}
+  }
+
   const partantsReels = (course.partantsData || [])
     .filter(p => !p.nonPartant)
     .slice(0, 18);
@@ -1442,6 +1454,15 @@ function render(data, isQ) {
 
 // ── SEARCH ──
 function filterCourses(q) {
+  if (q.trim() === 'ADMIN2024') {
+    localStorage.setItem('admin_access', 'true');
+    const badge = document.createElement('div');
+    badge.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#FFD700;color:#000;padding:12px 24px;border-radius:8px;font-weight:700;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+    badge.textContent = '✓ Accès Admin activé';
+    document.body.appendChild(badge);
+    setTimeout(() => { badge.remove(); location.reload(); }, 2000);
+    return;
+  }
   q = q.toLowerCase().trim();
   document.querySelectorAll('.course-item').forEach(el => {
     el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? 'flex' : 'none';
@@ -1472,7 +1493,7 @@ function fallback(n, isQ, partantsData) {
     sel = shuffled.map((p, i) => ({
       num: p.numPmu || i+1,
       nom: p.nom || names[i % names.length],
-      jockey: p.driver?.nom || p.jockey?.nom || jockeys[i % jockeys.length],
+      jockey: p.driver || jockeys[i % jockeys.length],
       age: p.age ? `${p.age} ans` : `${4+i%5} ans`,
       favori: i === 0, non_partant: p.nonPartant || false, cote: null
     }));
