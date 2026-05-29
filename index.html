@@ -1172,9 +1172,6 @@ document.addEventListener('click', () => {
 });
 
 // ── DONNÉES RÉUNIONS ──
-const _cw = console.warn; const _ce = console.error;
-console.warn = (...a) => { if(!a[0]?.toString().includes('PMU')&&!a[0]?.toString().includes('fallback')) _cw(...a); };
-console.error = (...a) => { if(!a[0]?.toString().includes('fetch')&&!a[0]?.toString().includes('JSON')) _ce(...a); };
 
 let REUNIONS = [];
 const cache = {};
@@ -1247,6 +1244,8 @@ async function loadProgramme() {
     if (!data.success || !data.reunions?.length) throw new Error('vide');
 
     REUNIONS = data.reunions;
+    // Clear stale cache — fallback data has no numReunion/dateStr, real data does
+    Object.keys(cache).forEach(k => delete cache[k]);
     buildTabs(); buildNav();
     selectReunion(REUNIONS[0].id);
     setTimeout(() => selectCourse(REUNIONS[0].id, "C1"), 100);
@@ -1401,29 +1400,31 @@ async function generate(course, key) {
 
   // Fetch real participants from PMU via proxy
   if (course.numReunion && course.numCourse && course.dateStr && !course.partantsData?.length) {
+    console.log(`[PMU] Participants → /api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
     try {
       const pResp = await fetch(`/api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
       const pData = await pResp.json();
+      console.log('[PMU] Participants result:', pData.success, pData.participants?.length, 'partants', pData.error || '');
       if (pData.success && pData.participants?.length) {
         course.partantsData = pData.participants;
       }
-    } catch (_) {}
+    } catch (e) { console.error('[PMU] Participants fetch error:', e.message); }
+  } else {
+    console.log(`[PMU] Skip participants fetch — numReunion:${course.numReunion} numCourse:${course.numCourse} dateStr:${course.dateStr} partantsData:${course.partantsData?.length||0}`);
   }
 
   // Fetch cotes and career history in parallel
   const [cotesResult, carriereResult] = await Promise.allSettled([
-    // Live PMU cotes
     (async () => {
       if (!course.numReunion || !course.numCourse || !course.dateStr || course.cotesData) return course.cotesData || {};
       const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
       const d = await r.json();
+      console.log('[PMU] Cotes:', d.success, Object.keys(d.cotes||{}).length, 'chevaux');
       return d.success ? d.cotes : {};
     })(),
-    // Career history for participants with known IDs
     (async () => {
       if (course.carriereData) return course.carriereData;
-      const ids = (course.partantsData || [])
-        .map(p => p.chevalId).filter(Boolean);
+      const ids = (course.partantsData || []).map(p => p.chevalId).filter(Boolean);
       if (!ids.length) return {};
       const r = await fetch(`/api/carriere?ids=${ids.join(',')}`);
       const d = await r.json();
@@ -1442,60 +1443,62 @@ async function generate(course, key) {
   const buildCarriereResume = (p) => {
     const hist = carriere[p.chevalId];
     if (!hist || !hist.length) return '';
-    const lines = hist.slice(0, 5).map(c => {
+    return ' — Historique: ' + hist.slice(0, 5).map(c => {
       const pos = c.position ? `${c.position}e/${c.nombrePartants||'?'}` : 'NC';
-      return `${c.date?.slice(0,10)||''} ${c.hippodrome||''} ${c.discipline||''} ${c.distance||''} → ${pos}${c.terrain?' ('+c.terrain+')':''}`;
-    });
-    return ` — Dernières courses: [${lines.join(' | ')}]`;
+      return `${c.distance||''} ${c.terrain||''} → ${pos}`;
+    }).join(', ');
   };
 
   const buildPartantLine = p => {
-    const cote = cotes[p.numPmu] ? ` — Cote PMU: ${cotes[p.numPmu]}` : (p.indiceCote ? ` — Cote: ${p.indiceCote}` : '');
+    const cotePmu = cotes[p.numPmu] ? ` — Cote PMU: ${cotes[p.numPmu]}` : '';
     const driver = p.driver ? ` — Jockey/Driver: ${p.driver}` : '';
     const musique = p.musique ? ` — Musique: ${p.musique}` : '';
     const hist = buildCarriereResume(p);
-    return `N°${p.numPmu} ${p.nom}${driver}${musique}${cote}${hist}`;
+    return `N°${p.numPmu} ${p.nom}${driver}${musique}${cotePmu}${hist}`;
   };
 
   const hasCarriere = Object.keys(carriere).length > 0;
-  const infoPartants = partantsReels.length > 0
-    ? `Partants (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
-    + (nonPartantsReels.length ? `\nNon-partants: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
-    : `Nombre de partants estimé: ${n}. Invente des noms de chevaux PMU réalistes avec musiques et jockeys.`;
+  const hasRealPartants = partantsReels.length > 0;
+
+  const infoPartants = hasRealPartants
+    ? `PARTANTS OFFICIELS (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
+      + (nonPartantsReels.length ? `\nNON-PARTANTS: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
+    : `Nombre de partants: ${n}. Crée des noms de chevaux PMU réalistes avec jockeys français/belges et musiques (ex: "1-2-0-3-1").`;
 
   const langNote = currentLang !== 'fr'
-    ? `\nIMPORTANT: Write ALL text fields (analyse, conditions, per-horse analyse) in language: ${currentLang}. Keep horse names and jockey names unchanged.`
+    ? `\nWrite the "analyse", "conditions", and per-horse "analyse" fields in language code: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
     : '';
 
   const quinteFields = isQ ? `"quinte":[7,3,1,9,5],` : '';
-  const deuxSur4 = n >= 10 ? `,"2_sur_4":"8x"` : '';
+  const deuxSur4Rapport = n >= 10 ? `,"2_sur_4":"8x"` : '';
   const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
-  const carriereNote = hasCarriere
-    ? '\nHistorique des 5 dernières courses fourni pour chaque cheval. Analyse les performances passées (positions, terrain, distance, discipline) pour évaluer la forme réelle.'
-    : '';
 
-  const prompt = `Tu es un expert PMU chevronné. Génère une analyse complète basée sur les données réelles pour cette course :
+  const prompt = `Tu es un consultant hippique professionnel PMU avec 25 ans d'expertise. Ton rôle est de produire une analyse tranchée, précise et argumentée — comme un vrai spécialiste qui donne de vrais conseils.
 
-COURSE: ${course.nom}
-TYPE: ${course.type} | DISTANCE: ${course.dist} | TERRAIN: ${course.terrain}
-${isQ ? '⭐ COURSE QUINTÉ+' : ''}
+━━━ COURSE: ${course.nom} ━━━
+Type: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain}${isQ ? ' | ⭐ QUINTÉ+' : ''}${hasCarriere ? ' | Historique carrière fourni' : ''}
+
 ${infoPartants}
-${carriereNote}${langNote}
+${langNote}
 
-Réponds UNIQUEMENT avec ce JSON valide (rien avant, rien après) :
-{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"7.5","analyse":"Analyse basée sur historique réel: forme, terrain, distance. 1-2 phrases.","confiance":75}],"classement":[7,3,1,9,5],"couple":[7,3],${quinteFields}"rapports":{"gagnant":"4.2x","place":"1.8x","couple":"12x"${deuxSur4}${quinteRapports}},"analyse":"Analyse générale 2-3 phrases basée sur les données.","conditions":"Commentaire terrain/distance/discipline 1-2 phrases."}
+STYLE REQUIS pour le champ "analyse" de chaque cheval — exemples de bon niveau:
+• "RAFFIN en grande forme, 3 victoires sur ses 5 dernières sur ${course.dist}, parfaitement adapté à ce terrain — FAVORI LOGIQUE"
+• "Attention, BARRIER n'a jamais couru sur terrain souple, sa musique montre une méforme récente (0-0-0) — À ÉVITER"
+• "OUTSIDER DANGEREUX : cote attractive, musique en progression, jockey performant sur cette piste"
 
-RÈGLES STRICTES:
-- selection: TOUS les partants dans l'ordre des numéros de dossard (inclure non-partants avec non_partant:true, confiance:0)
-- analyse par cheval: basée sur historique réel si fourni (musique + dernières courses), sinon estimation
-- confiance: 0-100, niveau de confiance pour ce cheval (basé sur forme, terrain, distance, cote)
-- cote: utilise la cote PMU si fournie, sinon estime
-- favori:true pour le meilleur potentiel seulement
-- classement: top 5 numéros du plus probable au moins probable (non-partants exclus)
-- couple: [1er, 2ème]${isQ ? ' — quinte: [1er…5ème]' : ''}
-- rapports: gagnant + placé + couplé${n >= 10 ? ' + 2_sur_4' : ''}${isQ ? ' + quarte + quinte + quinte_ordre' : ''} (valeurs estimées)
-- rapports: gains estimés réalistes selon le nombre de partants
-- JSON VALIDE UNIQUEMENT, pas de commentaires`;
+Réponds UNIQUEMENT avec ce JSON valide (rien avant, rien après):
+{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"4.5","analyse":"Analyse experte 2-3 phrases avec jockey nommé, avis sur forme+terrain+distance+cote. Conclure par: FAVORI / OUTSIDER DANGEREUX / INTÉRESSANT / À ÉVITER","confiance":72}],"classement":[N1,N2,N3,N4,N5],"couple":[N1,N2],${quinteFields}"rapports":{"gagnant":"4.5x","place":"1.9x","couple":"14x"${deuxSur4Rapport}${quinteRapports}},"analyse":"Recommandation claire: quel cheval jouer en GAGNANT et pourquoi. Top 3 argumenté. 3-4 phrases.","conditions":"Impact terrain/distance/discipline sur cette course: qui en profite, qui est pénalisé."}
+
+RÈGLES OBLIGATOIRES:
+1. selection: TOUS les partants par ordre de numéro (non-partants → non_partant:true, confiance:0, cote:null)
+2. cote OBLIGATOIRE pour chaque partant actif — estimation réaliste (favori≈2-5, second≈6-10, outsider≈12-30)
+3. analyse par cheval: 2-3 phrases AVEC le nom du jockey, évaluation musique, terrain, distance + label final
+4. favori:true pour UN SEUL cheval (le plus probable)
+5. confiance: favori 75-90 | 2ème/3ème 50-74 | outsiders 20-49 | non-partants 0
+6. classement: top 5 numéros du plus probable au moins probable
+7. couple: les 2 meilleurs numéros${isQ ? '\n8. quinte: top 5 dans l\'ordre' : ''}
+8. rapports: estimés réalistes selon nombre de partants (${n} partants)
+9. JSON VALIDE UNIQUEMENT — aucun texte avant ou après le JSON`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1540,8 +1543,7 @@ RÈGLES STRICTES:
           age: p.age ? `${p.age} ans` : (ai.age || ''),
           favori: ai.favori || false,
           non_partant: p.nonPartant,
-          // Fix 2: PMU cote first, then AI-estimated cote
-          cote: ai.cote || null,
+          cote: ai.cote || (ai.confiance ? (100/Math.max(ai.confiance,5)*1.5).toFixed(1) : null),
           cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
           analyse: ai.analyse || null,
           confiance: p.nonPartant ? 0 : (ai.confiance || null),
@@ -1558,10 +1560,11 @@ RÈGLES STRICTES:
         const maxC = Math.max(...favoris.map(h => h.confiance||0));
         favoris.forEach(h => { if ((h.confiance||0) < maxC) h.favori = false; });
       }
-    } else if (Object.keys(cotes).length) {
-      // No real participants, still merge PMU cotes
+    } else {
+      // No real participants — merge PMU cotes and ensure cote field exists
       result.selection = (result.selection || []).map(h => ({
         ...h,
+        cote: h.cote || (h.confiance ? (100/Math.max(h.confiance,5)*1.5).toFixed(1) : null),
         cotePmu: cotes[h.num] ? String(cotes[h.num]) : null
       }));
     }
@@ -1609,11 +1612,13 @@ function render(data, isQ) {
   document.getElementById('horsesGrid').innerHTML =
     partants.map(h => {
       const pmuCote = h.cotePmu
-        ? `<div class="cote-live cote-live-pmu">PMU ${h.cotePmu}</div>`
+        ? `<div class="cote-live cote-live-pmu">★ PMU ${h.cotePmu}</div>`
         : '';
-      const iaCote = h.cote && !h.cotePmu
-        ? `<div class="cote-live">${t('main.coteIA')} ${h.cote}</div>`
-        : (h.cote && h.cotePmu ? `<div class="cote-live" style="opacity:0.5;">${t('main.coteIA')} ${h.cote}</div>` : '');
+      const iaCote = h.cote && !h.non_partant
+        ? (h.cotePmu
+          ? `<div class="cote-live" style="opacity:0.45;font-size:0.58rem;">IA ${h.cote}</div>`
+          : `<div class="cote-live">~ ${h.cote}</div>`)
+        : '';
       const analyseHorse = h.analyse
         ? `<div class="horse-analyse">${h.analyse}</div>`
         : '';
