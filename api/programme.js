@@ -153,6 +153,81 @@ export default async function handler(req, res) {
     return res.json({ success: true, source: 'boturfers', reunions });
 
   } catch (e2) {
-    res.json({ success: false, error: e2.message });
+    console.warn('boturfers failed:', e2.message, '— fallback equidia');
+  }
+
+  // ── 3. FALLBACK : SCRAPING EQUIDIA (données brutes uniquement) ──
+  try {
+    const r3 = await fetch('https://www.equidia.fr/courses-hippique', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'fr-FR,fr;q=0.9',
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r3.ok) throw new Error(`Equidia HTTP ${r3.status}`);
+    const html = await r3.text();
+
+    // Find all course-card links: href="/courses/YYYY-MM-DD/Rn/Cn"
+    const linkRe = /href="\/courses\/(\d{4}-\d{2}-\d{2})\/(R(\d+))\/(C(\d+))"/g;
+    const links = [];
+    let lm;
+    while ((lm = linkRe.exec(html)) !== null) {
+      links.push({
+        equidiaDate: lm[1], rKey: lm[2], rNum: parseInt(lm[3]),
+        cKey: lm[4], cNum: parseInt(lm[5]), pos: lm.index
+      });
+    }
+    if (!links.length) throw new Error('Equidia: aucun lien course trouvé');
+
+    const reunionsMap = {};
+    for (let i = 0; i < links.length; i++) {
+      const { equidiaDate, rKey, rNum, cKey, cNum, pos } = links[i];
+      const nextPos = i + 1 < links.length ? links[i + 1].pos : pos + 2000;
+      const block = html.slice(pos, Math.min(nextPos, pos + 2000));
+
+      const heureM  = block.match(/course-card--time--hours[^>]*>(\d{1,2}:\d{2})/);
+      const hippoM  = block.match(/description--lieu[^>]*>[\s\S]{0,200}?<span[^>]*>([^<]+)</);
+      const nomM    = block.match(/description--prix[^>]*>\s*([^<\n]{2,60})\s*</);
+      const textM   = block.match(/<b>(\d+)\s*[Pp]artants?<\/b>[^|]*\|([^|]+)\|([^|]*)\|([^|<€]{0,30})/);
+
+      const heure      = heureM ? heureM[1].replace(':', 'h') : '?h??';
+      const hippodrome = hippoM ? hippoM[1].trim() : rKey;
+      const nom        = nomM   ? nomM[1].trim()  : `Course ${cNum}`;
+      const part       = textM  ? parseInt(textM[1]) : 10;
+      const discipline = textM  ? textM[2].trim() : '';
+      const distRaw    = textM  ? textM[4].trim() : '';
+      const distM      = distRaw.match(/(\d+\s*m)/i);
+      const dist       = distM  ? distM[1].replace(/\s/, '').toLowerCase() : '';
+      const isQuinte   = /quinté\+|quinte\+/i.test(block);
+
+      // DDMMYYYY for PMU API compatibility
+      const [y, mo, d] = equidiaDate.split('-');
+      const dateStrDDMMYYYY = `${d}${mo}${y}`;
+
+      if (!reunionsMap[rKey]) {
+        reunionsMap[rKey] = { id: rKey, hippodrome: toTitle(hippodrome), pays: 'France', courses: [] };
+      }
+      if (!reunionsMap[rKey].courses.some(c => c.id === cKey)) {
+        reunionsMap[rKey].courses.push({
+          id: cKey, ref: `${rKey} ${cKey}`, nom: toTitle(nom),
+          type: discipline, dist, part, heure,
+          terrain: 'Bon', quinte: isQuinte,
+          numReunion: rNum, numCourse: cNum,
+          dateStr: dateStrDDMMYYYY, partantsData: []
+        });
+      }
+    }
+
+    const reunions = Object.values(reunionsMap)
+      .sort((a, b) => parseInt(a.id.slice(1)) - parseInt(b.id.slice(1)));
+    reunions.forEach(reu => reu.courses.sort((a, b) => parseInt(a.id.slice(1)) - parseInt(b.id.slice(1))));
+
+    if (!reunions.length) throw new Error('Equidia: aucune réunion extraite');
+    return res.json({ success: true, source: 'equidia', reunions });
+
+  } catch (e3) {
+    res.json({ success: false, error: e3.message });
   }
 }
