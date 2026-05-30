@@ -1565,9 +1565,9 @@ async function generate(course, key) {
   updateLoadingText('⟳ Historiques & analyse IA...');
   clearLoadingSteps();
 
-  updateLoadingText('⟳ Agent 2 — Cotes & historiques...');
-  // Fetch cotes and career history in parallel
-  const [cotesResult, carriereResult] = await Promise.allSettled([
+  updateLoadingText('⟳ Agent 2 — Cotes, historiques & terrain...');
+  // Fetch cotes, career history, and Geny context in parallel
+  const [cotesResult, carriereResult, contexteResult] = await Promise.allSettled([
     (async () => {
       if (!course.numReunion || !course.numCourse || !course.dateStr || course.cotesData) return course.cotesData || {};
       const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
@@ -1583,10 +1583,24 @@ async function generate(course, key) {
       const d = await r.json();
       return d.success ? d.carriere : {};
     })(),
+    (async () => {
+      if (!course.numReunion || !course.numCourse || !course.dateStr) return {};
+      try {
+        const r = await fetch(`/api/contexte?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
+        const d = await r.json();
+        console.log('[Geny] Contexte:', d.success, 'terrain:', d.terrain, 'chevaux:', d.horses?.length || 0);
+        return d.success ? d : {};
+      } catch(e) { return {}; }
+    })(),
   ]);
 
   course.cotesData = cotesResult.status === 'fulfilled' ? cotesResult.value : {};
   course.carriereData = carriereResult.status === 'fulfilled' ? carriereResult.value : {};
+  const contexte = contexteResult.status === 'fulfilled' ? contexteResult.value : {};
+  const terrainReel = contexte.terrain || course.terrain || 'Bon';
+  const penetrometre = contexte.penetrometre ? ` (Pénétromètre: ${contexte.penetrometre})` : '';
+  const genyHorses = {};
+  if (Array.isArray(contexte.horses)) contexte.horses.forEach(h => { genyHorses[h.num] = h; });
 
   const cotes = course.cotesData || {};
   const carriere = course.carriereData || {};
@@ -1609,7 +1623,10 @@ async function generate(course, key) {
     const sexe = p.sexe ? ` | Sexe: ${p.sexe}` : '';
     const musique = p.musique ? ` | Musique: ${p.musique}` : '';
     const hist = buildCarriereResume(p);
-    return `N°${p.numPmu} ${p.nom}${driver}${age}${sexe}${musique}${cotePmu}${hist}`;
+    const gH = genyHorses[p.numPmu];
+    const poids = gH?.poids ? ` | Poids: ${gH.poids}` : '';
+    const coteLive = gH?.coteLive ? ` | Cote Geny live: ${gH.coteLive}` : '';
+    return `N°${p.numPmu} ${p.nom}${driver}${age}${sexe}${musique}${cotePmu}${poids}${coteLive}${hist}`;
   };
 
   const hasCarriere = Object.keys(carriere).length > 0;
@@ -1617,6 +1634,7 @@ async function generate(course, key) {
 
   addLoadingStep('done', `✓ ${partantsReels.length} partant(s) chargés`);
   addLoadingStep('done', `✓ Cotes ${Object.keys(cotes).length ? 'PMU' : 'estimées'}${hasCarriere ? ' — historique inclus' : ''}`);
+  addLoadingStep('done', `✓ Terrain Geny: ${terrainReel}${penetrometre}${Object.keys(genyHorses).length ? ` — ${Object.keys(genyHorses).length} poids chargés` : ''}`);
   addLoadingStep('active', '🤖 Analyse multi-agents en cours...');
 
   const infoPartants = hasRealPartants
@@ -1644,10 +1662,12 @@ Exemple : "N°1 IDAHO MAIL (Driver E. Lemaitre) : N'a pas gagné depuis 2 mois, 
 N'invente AUCUN nom de cheval ou de jockey. Utilise UNIQUEMENT les partants fournis dans le prompt.
 Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
 
+  const conditionGeny = contexte.conditionCourse ? `\nCONDITIONS GENY: ${contexte.conditionCourse}` : '';
+
   const prompt = `Analyse experte de cette course PMU:
 
 COURSE: ${course.nom}
-Discipline: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrain} | Partants: ${n}${isQ ? ' | ⭐ QUINTÉ+' : ''}
+Discipline: ${course.type} | Distance: ${course.dist} | Terrain: ${terrainReel}${penetrometre} | Partants: ${n}${isQ ? ' | ⭐ QUINTÉ+' : ''}${conditionGeny}
 
 ${infoPartants}
 ${langNote}
