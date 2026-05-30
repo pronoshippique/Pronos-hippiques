@@ -1640,29 +1640,28 @@ async function generate(course, key) {
     : `Nombre de partants: ${n}. Crée des noms de chevaux PMU réalistes avec jockeys français/belges et musiques réalistes.`;
 
   const langNote = currentLang !== 'fr'
-    ? `\nIMPORTANT: Write all text fields (analyse, conditions, recommandation, jockey_note, terrain_note, distance_note) in language: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
+    ? `\nIMPORTANT: Write all text fields (analyse_cheval, analyse, conditions, recommandation) in language: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
     : '';
 
-  const quinteFields = isQ ? `"quinte":[7,3,1,9,5],` : '';
   const deuxSur4Rapport = n >= 10 ? `,"2_sur_4":"8x"` : '';
   const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
+  const quinteSelFields = isQ ? `,"quarte":[F,N2,N3,N4],"quinte":[F,N2,N3,N4,N5]` : '';
 
   const systemPrompt = `Tu es Henri Blanc, expert hippique professionnel avec 25 ans d'expérience comme consultant pour les plus grands haras de France. Tu analyses chaque course avec rigueur et précision.
 
-Pour chaque cheval tu DOIS fournir :
-- Son numéro de dossard et son nom exact
-- Une analyse de sa forme récente : "A gagné ses 2 dernières sorties sur terrain souple" ou "N'a pas gagné depuis 3 mois, forme déclinante"
-- L'analyse du jockey/driver : "Raffin est le meilleur driver du moment, 28% de victoires ce mois"
-- L'adéquation avec les conditions : distance, terrain, discipline
-- Un verdict clair : FAVORI / OUTSIDER DANGEREUX / À ÉVITER
+RÈGLE DE COHÉRENCE ABSOLUE — tu ne peux jamais la violer :
+- "favori" = numéro du cheval que tu sélectionnes GAGNANT (un seul numéro entier)
+- "top5[0]" DOIT être égal à "favori"
+- "couple[0]" DOIT être égal à "favori"
+- "quarte[0]" et "quinte[0]" DOIVENT être égaux à "favori"
+- Le cheval avec ce numéro dans "selection" DOIT avoir verdict:"FAVORI" et la confiance la plus haute
 
-Tu DOIS donner des pronostics COHÉRENTS et ARGUMENTÉS :
-- Le favori doit avoir les meilleures chances réelles
-- Les outsiders doivent avoir des arguments précis
-- Tes 5 premiers doivent être dans un ordre logique et justifié
-- Tes sélections Gagnant/Couplé/Quarté/Quinté doivent être cohérentes entre elles
+FORMAT "analyse_cheval" OBLIGATOIRE pour chaque cheval :
+"N°X NOM - Driver/Jockey Prénom Nom : [forme récente précise avec résultats chiffrés]. [adéquation terrain/distance]. VERDICT EN MAJUSCULES."
+Exemple : "N°10 VOLTAIRE DE MEAD - Driver P. Raffin : 3 victoires consécutives sur terrain souple, forme brillante. Parfaitement adapté au 2175m de Vincennes. FAVORI LOGIQUE."
+Exemple : "N°1 IDAHO MAIL - Driver E. Lemaitre : N'a pas gagné depuis 2 mois, musique irrégulière. Distance légèrement longue pour ses aptitudes actuelles. OUTSIDER."
 
-INTERDIT : donner des pronostics au hasard ou sans arguments.
+INTERDIT : pronostics incohérents, favori absent du top5, analyse sans arguments chiffrés.
 
 Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
 
@@ -1674,24 +1673,16 @@ Discipline: ${course.type} | Distance: ${course.dist} | Terrain: ${course.terrai
 ${infoPartants}
 ${langNote}
 
-Génère une analyse de niveau consultant professionnel. Chaque cheval doit avoir:
-- "verdict": "FAVORI" | "DANGER" | "OUTSIDER" | "INTERESSANT" | "EVITER" | "NEUTRE"
-- "jockey_note": évaluation du jockey (forme récente, % victoires estimé, adéquation course)
-- "terrain_note": adéquation terrain (commence par "✓" si favorable, "✗" si défavorable)
-- "distance_note": adéquation distance (commence par "✓" si favorable, "✗" si défavorable)
-- "analyse": 2-3 phrases expertes avec le nom du jockey cité, lecture musique, avis tranché
-- "cote": estimation réaliste (favori: 2-5, second: 5-10, outsider: 10-30)
-- "confiance": 0-100
+SCHÉMA JSON À RESPECTER STRICTEMENT (F = numéro du favori) :
+{"favori":F,"top5":[F,N2,N3,N4,N5],"couple":[F,N2]${quinteSelFields},"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","non_partant":false,"cote":"4.5","confiance":72,"verdict":"OUTSIDER","analyse_cheval":"N°1 NOM - Driver J. Nom : [forme récente]. [terrain/distance]. OUTSIDER."},{"num":F,"nom":"NOM_FAVORI","jockey":"P. Raffin","age":"6 ans","non_partant":false,"cote":"3.2","confiance":85,"verdict":"FAVORI","analyse_cheval":"N°F NOM_FAVORI - Driver P. Raffin : [forme brillante chiffrée]. [parfaitement adapté]. FAVORI LOGIQUE."}],"rapports":{"gagnant":"3.2x","place":"1.6x","couple":"10x"${deuxSur4Rapport}${quinteRapports}},"recommandation":"GAGNANT: N°F [nom] — [argument principal]. COUPLÉ: N°F-N2. ${isQ ? 'QUARTÉ: F-N2-N3-N4.' : ''}","analyse":"[3-4 phrases sur la course, hiérarchie claire, argument favori en premier].","conditions":"[Qui profite du terrain/distance, qui est pénalisé.]"}
 
-Réponds UNIQUEMENT avec ce JSON valide:
-{"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","favori":false,"non_partant":false,"cote":"4.5","confiance":72,"verdict":"OUTSIDER","jockey_note":"Jockey régulier, 18% de victoires sur cette distance","terrain_note":"✓ Terrain idéal pour ce cheval","distance_note":"✓ 2 victoires récentes sur cette distance","analyse":"Analyse experte 2-3 phrases avec lecture musique et avis tranché."}],"classement":[N1,N2,N3,N4,N5],"couple":[N1,N2],${quinteFields}"rapports":{"gagnant":"4.5x","place":"1.9x","couple":"14x"${deuxSur4Rapport}${quinteRapports}},"recommandation":"GAGNANT: Jouer N°X avec confiance car [raison]. COUPLÉ: N°X-Y. TOP 3: N°X > N°Y > N°Z.","analyse":"Analyse globale experte 3-4 phrases avec recommandation claire.","conditions":"Impact terrain/distance sur cette course: qui en profite, qui est pénalisé."}
-
-RÈGLES:
-- selection: TOUS les partants par numéro croissant (non-partants: non_partant:true, confiance:0, cote:null, verdict:"NEUTRE")
-- favori:true pour UN SEUL cheval
-- classement: top 5 numéros${isQ ? ', couple, quinte: top 5 dans l\'ordre' : ', couple'}
-- rapports: gains estimés réalistes pour ${n} partants
-- JSON VALIDE UNIQUEMENT`;
+RÈGLES ABSOLUES :
+1. favori, top5[0], couple[0]${isQ ? ', quarte[0], quinte[0]' : ''} = MÊME numéro
+2. selection = TOUS les partants par numéro croissant
+3. Non-partants : non_partant:true, confiance:0, cote:null, verdict:"NEUTRE", analyse_cheval:"N°X NOM : Non-partant."
+4. Un seul cheval avec verdict:"FAVORI" — celui dont le num = favori
+5. Cotes réalistes : favori 2-5, second 5-10, outsider 10-30
+6. JSON VALIDE UNIQUEMENT, aucun texte hors JSON`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1721,8 +1712,28 @@ RÈGLES:
     }
     if (!result) throw new Error("JSON non parseable");
 
-    // ── Fix 1: re-anchor selection to real PMU participant data ──
-    // Prevents AI from mismatching dossard numbers with jockeys/names
+    // ── COHÉRENCE : source de vérité = result.favori (nombre entier) ──
+    const favoriNum = (typeof result.favori === 'number') ? result.favori
+      : (Array.isArray(result.top5) && result.top5[0]) || null;
+
+    // Normalise top5 → classement (backward compat render)
+    result.classement = Array.isArray(result.top5) ? result.top5.slice(0, 5)
+      : (Array.isArray(result.classement) ? result.classement.slice(0, 5) : []);
+
+    // Force favori en tête de toutes les sélections
+    const forceFirst = (arr, num, maxLen) => {
+      if (!num || !Array.isArray(arr)) return arr;
+      if (arr[0] === num) return arr.slice(0, maxLen);
+      return [num, ...arr.filter(x => x !== num)].slice(0, maxLen);
+    };
+    result.classement = forceFirst(result.classement, favoriNum, 5);
+    result.couple     = forceFirst(result.couple, favoriNum, 2);
+    if (isQ) {
+      result.quarte = forceFirst(result.quarte, favoriNum, 4);
+      result.quinte = forceFirst(result.quinte, favoriNum, 5);
+    }
+
+    // ── Re-anchor aux vrais partants PMU ──
     if (partantsReels.length > 0) {
       const aiByNum = {};
       for (const h of (result.selection || [])) aiByNum[h.num] = h;
@@ -1730,42 +1741,41 @@ RÈGLES:
       const allPart = [...partantsReels, ...nonPartantsReels];
       result.selection = allPart.map(p => {
         const ai = aiByNum[p.numPmu] || {};
+        const isFav = p.numPmu === favoriNum && !p.nonPartant;
         return {
           num: p.numPmu,
           nom: p.nom,
           jockey: p.driver || ai.jockey || '',
           age: p.age ? `${p.age} ans` : (ai.age || ''),
-          favori: ai.favori || false,
+          favori: isFav,
           non_partant: p.nonPartant,
           cote: ai.cote || (ai.confiance ? (100/Math.max(ai.confiance,5)*1.5).toFixed(1) : null),
           cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
-          verdict: p.nonPartant ? 'NEUTRE' : (ai.verdict || null),
-          jockey_note: ai.jockey_note || null,
-          terrain_note: ai.terrain_note || null,
-          distance_note: ai.distance_note || null,
-          analyse: ai.analyse || null,
+          verdict: p.nonPartant ? 'NEUTRE' : (isFav ? 'FAVORI' : (ai.verdict || null)),
+          analyse_cheval: ai.analyse_cheval || ai.analyse || null,
           confiance: p.nonPartant ? 0 : (ai.confiance || null),
         };
       });
 
-      // Exactly one favori (highest confiance among active runners)
+      // Garantit exactement un favori (fallback : meilleure confiance)
       const actifs = result.selection.filter(h => !h.non_partant);
-      const favoris = actifs.filter(h => h.favori);
-      if (favoris.length === 0 && actifs.length > 0) {
+      if (!actifs.some(h => h.favori) && actifs.length > 0) {
         const best = actifs.reduce((a, b) => ((b.confiance||0) > (a.confiance||0) ? b : a));
         best.favori = true;
-      } else if (favoris.length > 1) {
-        const maxC = Math.max(...favoris.map(h => h.confiance||0));
-        favoris.forEach(h => { if ((h.confiance||0) < maxC) h.favori = false; });
+        best.verdict = 'FAVORI';
       }
     } else {
-      // No real participants — merge PMU cotes and ensure cote/verdict fields exist
-      result.selection = (result.selection || []).map(h => ({
-        ...h,
-        cote: h.cote || (h.confiance ? (100/Math.max(h.confiance,5)*1.5).toFixed(1) : null),
-        cotePmu: cotes[h.num] ? String(cotes[h.num]) : null,
-        verdict: h.non_partant ? 'NEUTRE' : (h.verdict || null),
-      }));
+      result.selection = (result.selection || []).map(h => {
+        const isFav = h.num === favoriNum && !h.non_partant;
+        return {
+          ...h,
+          favori: isFav,
+          cote: h.cote || (h.confiance ? (100/Math.max(h.confiance,5)*1.5).toFixed(1) : null),
+          cotePmu: cotes[h.num] ? String(cotes[h.num]) : null,
+          verdict: h.non_partant ? 'NEUTRE' : (isFav ? 'FAVORI' : (h.verdict || null)),
+          analyse_cheval: h.analyse_cheval || h.analyse || null,
+        };
+      });
     }
 
     // ── Fix 3: enforce correct rapport types by course rules ──
@@ -1842,18 +1852,11 @@ function render(data, isQ) {
           : `<div class="cote-live">~ ${h.cote}</div>`)
         : '';
       const verdictBadge = (h.verdict && h.verdict !== 'NEUTRE' && h.verdict !== 'UNKNOWN' && !h.non_partant)
-        ? `<span class="verdict verdict-${h.verdict}">${h.verdict}</span>`
+        ? `<span class="verdict verdict-${h.verdict}">${h.verdict.replace('_', ' ')}</span>`
         : '';
-      const noteClass = txt => txt && txt.startsWith('✓') ? 'ok' : txt && txt.startsWith('✗') ? 'ko' : '';
-      const expertNotes = (h.jockey_note || h.terrain_note || h.distance_note)
-        ? `<div class="horse-notes">
-            ${h.jockey_note ? `<div class="horse-note"><span>👤</span><span>${h.jockey_note}</span></div>` : ''}
-            ${h.terrain_note ? `<div class="horse-note ${noteClass(h.terrain_note)}"><span>🏇</span><span>${h.terrain_note}</span></div>` : ''}
-            ${h.distance_note ? `<div class="horse-note ${noteClass(h.distance_note)}"><span>📏</span><span>${h.distance_note}</span></div>` : ''}
-          </div>`
-        : '';
-      const analyseHorse = h.analyse
-        ? `<div class="horse-analyse">${h.analyse}</div>`
+      // analyse_cheval = texte expert principal (format "N°X NOM - Driver : ... VERDICT.")
+      const analyseHorse = (h.analyse_cheval || h.analyse)
+        ? `<div class="horse-analyse">${h.analyse_cheval || h.analyse}</div>`
         : '';
       const confBar = (h.confiance != null && !h.non_partant)
         ? `<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
@@ -1871,7 +1874,6 @@ function render(data, isQ) {
         <div class="horse-info">
           <div class="horse-name">${h.nom} ${verdictBadge}</div>
           <div class="horse-sub">${h.jockey ? h.jockey+' · ' : ''}${h.age||''}</div>
-          ${expertNotes}
           ${analyseHorse}
           ${confBar}
         </div>
