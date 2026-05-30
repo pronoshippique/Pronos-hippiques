@@ -1604,42 +1604,54 @@ async function generate(course, key) {
   });
   const favoriNum = sorted[0].numPmu;
 
-  // Prompt partants pour l'IA
-  const partantsStr = actifs.map(p => {
-    const cote = getCote(p);
-    return `N°${p.numPmu} ${p.nom} (${p.driver||''}) - Cote: ${cote ? cote.toFixed(1) : 'NC'}`;
-  }).join('\n');
-
+  const hippo      = course.hippodrome || '';
+  const terrain    = course.terrain || 'Bon';
   const nonPartStr = nonPart.length
     ? `\nNon-partants : ${nonPart.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}`
     : '';
 
-  const hippo   = course.hippodrome || '';
-  const terrain = course.terrain || 'Bon';
-  const isQStr  = isQ ? ' | ⭐ QUINTÉ+' : '';
-  const quinteSelSchema = isQ ? `,"quarte":[N1,N2,N3,N4],"quinte":[N1,N2,N3,N4,N5]` : '';
-  const deuxSur4Schema  = n >= 10 ? `,"2_sur_4":"Xx"` : '';
-  const quinteRapSchema = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
-  const quarteReco      = isQ ? ` QUARTÉ : N1-N2-N3-N4.` : '';
+  // Construction du tableau partants pour le prompt
+  const partants = actifs.map(p => ({
+    numero: p.numPmu,
+    nom: p.nom,
+    driver: p.driver || '',
+    jockey: p.driver || '',
+    cote: getCote(p) !== null ? getCote(p).toFixed(1) : null,
+  }));
 
-  addLoadingStep('done', `✓ ${actifs.length} partant(s) chargés`);
+  addLoadingStep('done', `✓ ${partants.length} partant(s) chargés`);
   addLoadingStep('done', `✓ ${Object.keys(cotes).length} cotes PMU`);
   addLoadingStep('active', '🤖 Analyse IA en cours...');
 
-  const systemPrompt = `Tu es un expert hippique indépendant. Tu analyses les courses de manière professionnelle basée sur les cotes des chevaux. RÈGLES ABSOLUES :
-- Ne jamais classer les chevaux dans l'ordre 1,2,3,4,5
-- Le favori = le cheval avec la cote la plus basse
-- Top 5 = classés par cote croissante
-- Ne jamais mentionner PMU, Equidia, Geny ou tout autre site
-- Toujours écrire 2-3 phrases argumentées par cheval
-- Cohérence absolue : favori = 1er du top5 = 1er des sélections`;
+  const quinteSchema = isQ
+    ? `  "quarte": [NUM1, NUM2, NUM3, NUM4],\n  "quinte": [NUM1, NUM2, NUM3, NUM4, NUM5],`
+    : '';
 
-  const prompt = `Course : ${course.nom} - ${hippo} - ${course.dist||'?'} - ${course.type||''} - Terrain: ${terrain}${isQStr}
-Partants avec cotes :
-${partantsStr}${nonPartStr}
+  const systemPrompt = `Tu es un expert hippique indépendant. RÈGLES ABSOLUES :
+1. Le favori = TOUJOURS le cheval avec la cote la plus basse
+2. top5 = les 5 chevaux avec les cotes les plus basses, triés du moins cher au plus cher
+3. Le numéro dans favori DOIT être identique au premier numéro de top5
+4. Pour chaque cheval écris 2 phrases minimum avec son nom, son driver et un argument
+5. Ne mentionne jamais PMU, Equidia, Geny ou tout autre site
+6. Réponds UNIQUEMENT en JSON valide, rien d'autre`;
 
-Génère en JSON strict :
-{"favori":N,"top5":[N1,N2,N3,N4,N5],"couple":[N1,N2]${quinteSelSchema},"selection":[{"num":1,"nom":"NOM","cote":"X.X","verdict":"EVITER","analyse_cheval":"N°1 NOM (Driver) : phrase 1. phrase 2."},{"num":N1,"nom":"NOM_FAV","cote":"X.X","verdict":"FAVORI","analyse_cheval":"N°N1 NOM_FAV (Driver) : phrase 1. phrase 2. JOUER."}],"rapports":{"gagnant":"X.Xx","place":"X.Xx","couple":"Xx"${deuxSur4Schema}${quinteRapSchema}},"recommandation":"GAGNANT : N°N1 NOM_FAV (X.X) — favori logique.${quarteReco}","analyse":"3 phrases sur la course et la hiérarchie."}`;
+  const prompt = `Course : ${course.nom} à ${hippo} - ${course.dist||'?'} - ${course.type||''} - Terrain: ${terrain}
+Nombre de partants : ${partants.length}
+
+PARTANTS (utilise ces données exactement) :
+${partants.map(p => `N°${p.numero} ${p.nom} driver:${p.driver||p.jockey||'?'} cote:${p.cote||'NC'}`).join('\n')}${nonPartStr}
+
+Réponds en JSON strict :
+{
+  "favori": NUMERO_COTE_LA_PLUS_BASSE,
+  "top5": [NUM1_COTE_PLUS_BASSE, NUM2, NUM3, NUM4, NUM5],
+  "analyses": {
+    "NUM": "N°NUM NOM (Driver) : analyse forme et cote. Verdict FAVORI/OUTSIDER/EVITER."
+  },
+  "gagnant": NUM_FAVORI,
+  "couple": [NUM1, NUM2],
+${quinteSchema}  "recommandation": "GAGNANT : N°NUM NOM (cote). COUPLÉ : N°NUM-N°NUM."
+}`;
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1667,26 +1679,34 @@ Génère en JSON strict :
     }
     if (!result) throw new Error('JSON non parseable');
 
-    // Cohérence : favori = cheval avec la cote PMU la plus basse (priorité sur l'IA)
-    result.classement = Array.isArray(result.top5) ? result.top5.slice(0, 5) : [];
+    // Cohérence garantie : favori = cheval avec la cote PMU la plus basse
     const forceFirst = (arr, num, max) => {
       if (!num || !Array.isArray(arr)) return arr;
       return arr[0] === num ? arr.slice(0, max) : [num, ...arr.filter(x => x !== num)].slice(0, max);
     };
-    result.classement = forceFirst(result.classement, favoriNum, 5);
+    result.favori     = favoriNum;
+    result.classement = forceFirst(Array.isArray(result.top5) ? result.top5.slice(0,5) : sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
     result.couple     = forceFirst(result.couple, favoriNum, 2);
     if (isQ) {
       result.quarte = forceFirst(result.quarte || sorted.slice(0,4).map(p=>p.numPmu), favoriNum, 4);
       result.quinte = forceFirst(result.quinte || sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
     }
 
-    // Re-ancrage aux vrais partants PMU
-    const aiByNum = {};
-    for (const h of (result.selection || [])) aiByNum[h.num] = h;
+    // Conversion analyses{NUM: text} → selection[] pour render()
+    const analyses = result.analyses || {};
+    const rankMap  = {};
+    sorted.forEach((p, i) => { rankMap[p.numPmu] = i; });
 
     const getConfiance = (cote) => cote
       ? Math.round(Math.max(5, Math.min(92, 100 - Math.log(Math.max(cote, 1.01)) * 28)))
       : 40;
+
+    const getVerdict = (rank, isFav) => {
+      if (isFav) return 'FAVORI';
+      if (rank === 1) return 'DANGER';
+      if (rank <= 3) return 'SURVEILLER';
+      return 'EVITER';
+    };
 
     result.selection = allPartants.map(p => {
       if (p.nonPartant) return {
@@ -1694,24 +1714,33 @@ Génère en JSON strict :
         favori: false, non_partant: true, cote: null, cotePmu: null,
         verdict: 'NEUTRE', analyse_cheval: `N°${p.numPmu} ${p.nom} : Non-partant.`, confiance: 0,
       };
-      const ai   = aiByNum[p.numPmu] || {};
-      const isFav = p.numPmu === favoriNum;
-      const coteV = getCote(p);
+      const isFav  = p.numPmu === favoriNum;
+      const coteV  = getCote(p);
+      const rank   = rankMap[p.numPmu] ?? 99;
       return {
         num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
         favori: isFav, non_partant: false,
-        cote: ai.cote || (coteV ? coteV.toFixed(1) : null),
+        cote: coteV ? coteV.toFixed(1) : null,
         cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
-        verdict: isFav ? 'FAVORI' : (ai.verdict || 'EVITER'),
-        analyse_cheval: ai.analyse_cheval || ai.analyse || null,
+        verdict: getVerdict(rank, isFav),
+        analyse_cheval: analyses[String(p.numPmu)] || analyses[p.numPmu] || null,
         confiance: getConfiance(coteV),
       };
     });
 
-    // 2 sur 4 garanti pour toutes les courses avec 10+ partants
-    const rpts = result.rapports || {};
-    if (n >= 10 && !rpts['2_sur_4']) rpts['2_sur_4'] = '8x';
+    // Rapports calculés depuis les cotes réelles
+    const favCote = getCote(sorted[0]);
+    const secCote = sorted[1] ? getCote(sorted[1]) : null;
+    const rpts = {
+      gagnant: favCote ? `${favCote.toFixed(1)}x` : '4.2x',
+      place:   favCote ? `${Math.max(1.1, favCote * 0.37).toFixed(1)}x` : '1.8x',
+      couple:  (favCote && secCote) ? `${Math.round(favCote * secCote * 0.6)}x` : '12x',
+    };
+    if (n >= 10) rpts['2_sur_4'] = '8x';
+    if (isQ) { rpts.quarte = '85x'; rpts.quinte = '180x'; rpts.quinte_ordre = '2500x'; }
     result.rapports = rpts;
+
+    result.analyse = result.analyse || result.recommandation || '';
 
     cache[key] = result;
     render(result, isQ);
