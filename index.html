@@ -265,6 +265,7 @@ nav {
 .verdict-INTERESSANT { background:#2A6050; color:#fff; }
 .verdict-NEUTRE,.verdict-UNKNOWN { background:var(--dark-4); color:var(--cream-dim); border:1px solid var(--border); }
 .verdict-EVITER { background:#7F1D1D; color:#fff; }
+.verdict-SURVEILLER { background:#2A6050; color:#fff; }
 
 /* HORSE EXPERT NOTES */
 .horse-analyse { font-family:'DM Mono',monospace; font-size:0.57rem; color:var(--cream-dim); letter-spacing:0.03em; margin-top:6px; line-height:1.55; border-top:1px solid rgba(201,168,76,0.1); padding-top:5px; }
@@ -1557,249 +1558,163 @@ async function loadPartantsPreview(course) {
   }).join('');
 }
 
-// ── GÉNÉRATION PRONOSTICS IA ──
+// ── GÉNÉRATION PRONOSTICS BASÉS SUR LES COTES ──
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
-  // Les partants sont déjà dans course.partantsData (chargés par loadPartantsPreview avant generate())
-  updateLoadingText('⟳ Historiques & analyse IA...');
+
+  updateLoadingText('⟳ Chargement des cotes...');
   clearLoadingSteps();
 
-  updateLoadingText('⟳ Agent 2 — Cotes, historiques & terrain...');
-  // Fetch cotes, career history, and Geny context in parallel
-  const [cotesResult, carriereResult, contexteResult] = await Promise.allSettled([
+  // Fetch cotes + Geny contexte en parallèle
+  const [cotesResult, contexteResult] = await Promise.allSettled([
     (async () => {
-      if (!course.numReunion || !course.numCourse || !course.dateStr || course.cotesData) return course.cotesData || {};
+      if (course.cotesData) return course.cotesData;
+      if (!course.numReunion || !course.numCourse || !course.dateStr) return {};
       const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
       const d = await r.json();
-      console.log('[PMU] Cotes:', d.success, Object.keys(d.cotes||{}).length, 'chevaux');
       return d.success ? d.cotes : {};
-    })(),
-    (async () => {
-      if (course.carriereData) return course.carriereData;
-      const ids = (course.partantsData || []).map(p => p.chevalId).filter(Boolean);
-      if (!ids.length) return {};
-      const r = await fetch(`/api/carriere?ids=${ids.join(',')}`);
-      const d = await r.json();
-      return d.success ? d.carriere : {};
     })(),
     (async () => {
       if (!course.numReunion || !course.numCourse || !course.dateStr) return {};
       try {
         const r = await fetch(`/api/contexte?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
         const d = await r.json();
-        console.log('[Geny] Contexte:', d.success, 'terrain:', d.terrain, 'chevaux:', d.horses?.length || 0);
         return d.success ? d : {};
       } catch(e) { return {}; }
     })(),
   ]);
 
   course.cotesData = cotesResult.status === 'fulfilled' ? cotesResult.value : {};
-  course.carriereData = carriereResult.status === 'fulfilled' ? carriereResult.value : {};
-  const contexte = contexteResult.status === 'fulfilled' ? contexteResult.value : {};
-  const terrainReel = contexte.terrain || course.terrain || 'Bon';
-  const penetrometre = contexte.penetrometre ? ` (Pénétromètre: ${contexte.penetrometre})` : '';
+  const contexte   = contexteResult.status === 'fulfilled' ? contexteResult.value : {};
+  const terrainReel   = contexte.terrain || course.terrain || 'Bon';
+  const penetrometre  = contexte.penetrometre ? ` (Pén. ${contexte.penetrometre})` : '';
   const genyHorses = {};
   if (Array.isArray(contexte.horses)) contexte.horses.forEach(h => { genyHorses[h.num] = h; });
 
-  const cotes = course.cotesData || {};
-  const carriere = course.carriereData || {};
-  const partantsReels = (course.partantsData || []).filter(p => !p.nonPartant).slice(0, 18);
-  const nonPartantsReels = (course.partantsData || []).filter(p => p.nonPartant);
+  const cotes       = course.cotesData || {};
+  const allPartants = [...(course.partantsData || [])].sort((a, b) => (a.numPmu||0) - (b.numPmu||0));
+  const actifs      = allPartants.filter(p => !p.nonPartant);
+  const nonPart     = allPartants.filter(p => p.nonPartant);
 
-  const buildCarriereResume = (p) => {
-    const hist = carriere[p.chevalId];
-    if (!hist || !hist.length) return '';
-    return ' — Historique: ' + hist.slice(0, 5).map(c => {
-      const pos = c.position ? `${c.position}e/${c.nombrePartants||'?'}` : 'NC';
-      return `${c.distance||''} ${c.terrain||''} → ${pos}`;
-    }).join(', ');
-  };
-
-  const buildPartantLine = p => {
-    const cotePmu = cotes[p.numPmu] ? ` | Cote PMU: ${cotes[p.numPmu]}` : '';
-    const driver = p.driver ? ` | Jockey/Driver: ${p.driver}` : '';
-    const age = p.age ? ` | Âge: ${p.age} ans` : '';
-    const sexe = p.sexe ? ` | Sexe: ${p.sexe}` : '';
-    const musique = p.musique ? ` | Musique: ${p.musique}` : '';
-    const hist = buildCarriereResume(p);
-    const gH = genyHorses[p.numPmu];
-    const poids = gH?.poids ? ` | Poids: ${gH.poids}` : '';
-    const coteLive = gH?.coteLive ? ` | Cote Geny live: ${gH.coteLive}` : '';
-    return `N°${p.numPmu} ${p.nom}${driver}${age}${sexe}${musique}${cotePmu}${poids}${coteLive}${hist}`;
-  };
-
-  const hasCarriere = Object.keys(carriere).length > 0;
-  const hasRealPartants = partantsReels.length > 0;
-
-  addLoadingStep('done', `✓ ${partantsReels.length} partant(s) chargés`);
-  addLoadingStep('done', `✓ Cotes ${Object.keys(cotes).length ? 'PMU' : 'estimées'}${hasCarriere ? ' — historique inclus' : ''}`);
-  addLoadingStep('done', `✓ Terrain Geny: ${terrainReel}${penetrometre}${Object.keys(genyHorses).length ? ` — ${Object.keys(genyHorses).length} poids chargés` : ''}`);
-  addLoadingStep('active', '🤖 Analyse multi-agents en cours...');
-
-  const infoPartants = hasRealPartants
-    ? `PARTANTS OFFICIELS (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
-      + (nonPartantsReels.length ? `\nNON-PARTANTS: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
-    : `Données partants non disponibles. Analyse basée sur les paramètres connus uniquement : ${course.type} sur ${course.dist}, ${n} partants déclarés, terrain ${course.terrain}. N'invente AUCUN nom de cheval ou jockey.`;
-
-  const langNote = currentLang !== 'fr'
-    ? `\nIMPORTANT: Write all text fields (analyse_cheval, analyse, conditions, recommandation) in language: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
-    : '';
-
-  const deuxSur4Rapport = n >= 10 ? `,"2_sur_4":"8x"` : '';
-  const quinteRapports = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
-  const quinteSelFields = isQ ? `,"quarte":[F,N2,N3,N4],"quinte":[F,N2,N3,N4,N5]` : '';
-
-  const systemPrompt = `Tu es Henri Blanc, expert hippique professionnel avec 25 ans d'expérience comme consultant pour les plus grands haras de France. Tu analyses chaque course avec rigueur et précision.
-
-RÈGLE ABSOLUE : Le champ favori, le premier élément de top5, et le premier élément de couple doivent être EXACTEMENT le même numéro de dossard. Si tu mets le dossard 3 en favori, il doit être N°1 dans top5 et N°1 dans couple. Toute incohérence est interdite.
-
-FORMAT OBLIGATOIRE pour chaque cheval dans analyse_cheval — minimum 2 phrases avec arguments réels basés sur les données fournies :
-"N°3 NOM_CHEVAL (Jockey X) : [analyse forme et jockey avec données chiffrées]. [Verdict : FAVORI / OUTSIDER DANGEREUX / À SURVEILLER / À ÉVITER]."
-Exemple : "N°3 VOLTAIRE DE MEAD (Driver P. Raffin) : 3 victoires consécutives sur terrain souple, musique 1p1p2p — forme brillante, Raffin au sommet de sa forme avec 28% de victoires ce mois. Parfaitement adapté au 2175m de Vincennes, distance gagnée 4 fois cette saison. Verdict : FAVORI."
-Exemple : "N°1 IDAHO MAIL (Driver E. Lemaitre) : N'a pas gagné depuis 2 mois, musique 3a5p0p — forme irrégulière, Lemaitre en méforme relative (12% de victoires). Distance légèrement longue pour ses aptitudes actuelles, préfère le 1600m. Verdict : À ÉVITER."
-
-N'invente AUCUN nom de cheval ou de jockey. Utilise UNIQUEMENT les partants fournis dans le prompt.
-Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
-
-  const conditionGeny = contexte.conditionCourse ? `\nCONDITIONS GENY: ${contexte.conditionCourse}` : '';
-
-  const prompt = `Analyse experte de cette course PMU:
-
-COURSE: ${course.nom}
-Discipline: ${course.type} | Distance: ${course.dist} | Terrain: ${terrainReel}${penetrometre} | Partants: ${n}${isQ ? ' | ⭐ QUINTÉ+' : ''}${conditionGeny}
-
-${infoPartants}
-${langNote}
-
-SCHÉMA JSON À RESPECTER STRICTEMENT (F = numéro du favori) :
-{"favori":F,"top5":[F,N2,N3,N4,N5],"couple":[F,N2]${quinteSelFields},"selection":[{"num":1,"nom":"NOM","jockey":"J. Nom","age":"5 ans","non_partant":false,"cote":"4.5","confiance":72,"verdict":"OUTSIDER","analyse_cheval":"N°1 NOM - Driver J. Nom : [forme récente]. [terrain/distance]. OUTSIDER."},{"num":F,"nom":"NOM_FAVORI","jockey":"P. Raffin","age":"6 ans","non_partant":false,"cote":"3.2","confiance":85,"verdict":"FAVORI","analyse_cheval":"N°F NOM_FAVORI - Driver P. Raffin : [forme brillante chiffrée]. [parfaitement adapté]. FAVORI LOGIQUE."}],"rapports":{"gagnant":"3.2x","place":"1.6x","couple":"10x"${deuxSur4Rapport}${quinteRapports}},"recommandation":"GAGNANT: N°F [nom] — [argument principal]. COUPLÉ: N°F-N2. ${isQ ? 'QUARTÉ: F-N2-N3-N4.' : ''}","analyse":"[3-4 phrases sur la course, hiérarchie claire, argument favori en premier].","conditions":"[Qui profite du terrain/distance, qui est pénalisé.]"}
-
-RÈGLES ABSOLUES :
-1. favori, top5[0], couple[0]${isQ ? ', quarte[0], quinte[0]' : ''} = MÊME numéro
-2. selection = TOUS les partants par numéro croissant
-3. Non-partants : non_partant:true, confiance:0, cote:null, verdict:"NEUTRE", analyse_cheval:"N°X NOM : Non-partant."
-4. Un seul cheval avec verdict:"FAVORI" — celui dont le num = favori
-5. Cotes réalistes : favori 2-5, second 5-10, outsider 10-30
-6. JSON VALIDE UNIQUEMENT, aucun texte hors JSON`;
-
-  try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 5000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
-
-    const txt = data.content.filter(b => b.type === "text").map(b => b.text).join('');
-    let result = null;
-
-    try { result = JSON.parse(txt.trim()); } catch(e1) {}
-    if (!result) {
-      try {
-        const start = txt.indexOf('{');
-        const end = txt.lastIndexOf('}');
-        if (start !== -1 && end !== -1) result = JSON.parse(txt.slice(start, end+1));
-      } catch(e2) {}
-    }
-    if (!result) throw new Error("JSON non parseable");
-
-    // ── COHÉRENCE : source de vérité = result.favori (nombre entier) ──
-    const favoriNum = (typeof result.favori === 'number') ? result.favori
-      : (Array.isArray(result.top5) && result.top5[0]) || null;
-
-    // Normalise top5 → classement (backward compat render)
-    result.classement = Array.isArray(result.top5) ? result.top5.slice(0, 5)
-      : (Array.isArray(result.classement) ? result.classement.slice(0, 5) : []);
-
-    // Force favori en tête de toutes les sélections
-    const forceFirst = (arr, num, maxLen) => {
-      if (!num || !Array.isArray(arr)) return arr;
-      if (arr[0] === num) return arr.slice(0, maxLen);
-      return [num, ...arr.filter(x => x !== num)].slice(0, maxLen);
-    };
-    result.classement = forceFirst(result.classement, favoriNum, 5);
-    result.couple     = forceFirst(result.couple, favoriNum, 2);
-    if (isQ) {
-      result.quarte = forceFirst(result.quarte, favoriNum, 4);
-      result.quinte = forceFirst(result.quinte, favoriNum, 5);
-    }
-
-    // ── Re-anchor aux vrais partants PMU ──
-    if (partantsReels.length > 0) {
-      const aiByNum = {};
-      for (const h of (result.selection || [])) aiByNum[h.num] = h;
-
-      const allPart = [...partantsReels, ...nonPartantsReels];
-      result.selection = allPart.map(p => {
-        const ai = aiByNum[p.numPmu] || {};
-        const isFav = p.numPmu === favoriNum && !p.nonPartant;
-        return {
-          num: p.numPmu,
-          nom: p.nom,
-          jockey: p.driver || ai.jockey || '',
-          age: p.age ? `${p.age} ans` : (ai.age || ''),
-          favori: isFav,
-          non_partant: p.nonPartant,
-          cote: ai.cote || (ai.confiance ? (100/Math.max(ai.confiance,5)*1.5).toFixed(1) : null),
-          cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
-          verdict: p.nonPartant ? 'NEUTRE' : (isFav ? 'FAVORI' : (ai.verdict || null)),
-          analyse_cheval: ai.analyse_cheval || ai.analyse || null,
-          confiance: p.nonPartant ? 0 : (ai.confiance || null),
-        };
-      });
-
-      // Garantit exactement un favori (fallback : meilleure confiance)
-      const actifs = result.selection.filter(h => !h.non_partant);
-      if (!actifs.some(h => h.favori) && actifs.length > 0) {
-        const best = actifs.reduce((a, b) => ((b.confiance||0) > (a.confiance||0) ? b : a));
-        best.favori = true;
-        best.verdict = 'FAVORI';
-      }
-    } else {
-      result.selection = (result.selection || []).map(h => {
-        const isFav = h.num === favoriNum && !h.non_partant;
-        return {
-          ...h,
-          favori: isFav,
-          cote: h.cote || (h.confiance ? (100/Math.max(h.confiance,5)*1.5).toFixed(1) : null),
-          cotePmu: cotes[h.num] ? String(cotes[h.num]) : null,
-          verdict: h.non_partant ? 'NEUTRE' : (isFav ? 'FAVORI' : (h.verdict || null)),
-          analyse_cheval: h.analyse_cheval || h.analyse || null,
-        };
-      });
-    }
-
-    // ── Fix 3: enforce correct rapport types by course rules ──
-    const aiR = result.rapports || {};
-    const newRapports = {
-      gagnant: aiR.gagnant || '4.2x',
-      place:   aiR.place   || '1.8x',
-      couple:  aiR.couple  || '12x',
-    };
-    if (n >= 10) newRapports['2_sur_4'] = aiR['2_sur_4'] || aiR['2sur4'] || '8x';
-    if (isQ) {
-      newRapports.quarte       = aiR.quarte       || '85x';
-      newRapports.quinte       = aiR.quinte       || '180x';
-      newRapports.quinte_ordre = aiR.quinte_ordre || '2500x';
-    }
-    result.rapports = newRapports;
-
-    cache[key] = result;
-    render(result, isQ);
-
-  } catch(e) {
+  // Si aucun partant → fallback
+  if (!actifs.length) {
     const fb = fallback(n, isQ, course.partantsData, cotes);
     cache[key] = fb;
     render(fb, isQ);
+    return;
   }
+
+  // Résolution de la cote pour un cheval (PMU > Geny live > Geny ref > indiceCote)
+  const getCote = (p) => {
+    const v = parseFloat(cotes[p.numPmu]);
+    if (v > 0) return v;
+    const gH = genyHorses[p.numPmu];
+    if (gH?.coteLive) { const w = parseFloat(gH.coteLive); if (w > 0) return w; }
+    if (gH?.coteRef)  { const w = parseFloat(gH.coteRef);  if (w > 0) return w; }
+    if (p.indiceCote) return p.indiceCote / 10;
+    return null;
+  };
+
+  // Tri par cote croissante (null = fin de liste)
+  const sorted = [...actifs].sort((a, b) => {
+    const ca = getCote(a), cb = getCote(b);
+    if (ca === null && cb === null) return 0;
+    if (ca === null) return 1;
+    if (cb === null) return -1;
+    return ca - cb;
+  });
+
+  const rankMap = {};
+  sorted.forEach((p, i) => { rankMap[p.numPmu] = i; });
+  const favoriNum = sorted[0].numPmu;
+
+  const getVerdict = (rank, cote) => {
+    if (rank === 0) return 'FAVORI';
+    if (rank === 1 || (cote !== null && cote <= 5)) return 'DANGER';
+    if (rank <= 3 || (cote !== null && cote <= 12)) return 'SURVEILLER';
+    return 'EVITER';
+  };
+
+  const getAnalyse = (p, cote, rank) => {
+    const j  = p.driver ? ` (${p.driver})` : '';
+    const cs = cote !== null ? cote.toFixed(1) : '?';
+    if (rank === 0) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Grand favori du marché, les parieurs lui font largement confiance. Cote très basse indiquant une forme exceptionnelle. JOUER.`;
+    if (rank === 1) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Second choix des parieurs, solide alternative au favori. Inclure en couplé gagnant.`;
+    if (cote !== null && cote <= 5) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Bien coté, les parieurs le voient parmi les candidats sérieux. Outsider dangereux à intégrer dans les combinaisons.`;
+    if (cote !== null && cote <= 10) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Outsider intéressant, cote attractive. À inclure dans les combinaisons.`;
+    if (cote !== null && cote <= 25) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Cote élevée, marché peu confiant. À surveiller uniquement en combinaison.`;
+    return `N°${p.numPmu} ${p.nom}${j} (${cote !== null ? `cote ${cs}` : 'non coté'}) : Grosse cote, longshot. À éviter sauf surprise.`;
+  };
+
+  // Confiance inversement proportionnelle à la cote (échelle logarithmique)
+  const getConfiance = (cote) => {
+    if (cote === null) return 30;
+    return Math.round(Math.max(5, Math.min(92, 100 - Math.log(Math.max(cote, 1.01)) * 28)));
+  };
+
+  const selection = allPartants.map(p => {
+    if (p.nonPartant) {
+      return {
+        num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
+        favori: false, non_partant: true, cote: null, cotePmu: null,
+        verdict: 'NEUTRE', analyse_cheval: `N°${p.numPmu} ${p.nom} : Non-partant.`, confiance: 0,
+      };
+    }
+    const cote = getCote(p);
+    const rank = rankMap[p.numPmu] ?? 99;
+    return {
+      num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
+      favori: rank === 0, non_partant: false,
+      cote: cote !== null ? cote.toFixed(1) : null,
+      cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
+      verdict: getVerdict(rank, cote),
+      analyse_cheval: getAnalyse(p, cote, rank),
+      confiance: getConfiance(cote),
+    };
+  });
+
+  const top5   = sorted.slice(0, 5).map(p => p.numPmu);
+  const couple  = sorted.slice(0, 2).map(p => p.numPmu);
+  const quarte  = sorted.slice(0, 4).map(p => p.numPmu);
+  const quinte  = sorted.slice(0, 5).map(p => p.numPmu);
+
+  const favCote = getCote(sorted[0]);
+  const secCote = sorted[1] ? getCote(sorted[1]) : null;
+  const gagnantR = favCote  ? `${favCote.toFixed(1)}x`                            : '4.2x';
+  const placeR   = favCote  ? `${Math.max(1.1, favCote * 0.37).toFixed(1)}x`      : '1.8x';
+  const coupleR  = (favCote && secCote) ? `${Math.round(favCote * secCote * 0.6)}x` : '12x';
+  const rapports = { gagnant: gagnantR, place: placeR, couple: coupleR };
+  if (n >= 10) rapports['2_sur_4'] = '8x';
+  if (isQ) { rapports.quarte = '85x'; rapports.quinte = '180x'; rapports.quinte_ordre = '2500x'; }
+
+  const fav      = sorted[0], sec = sorted[1];
+  const favLabel = `N°${fav.numPmu} ${fav.nom}`;
+  const secLabel = sec ? `N°${sec.numPmu} ${sec.nom}` : '';
+  const terrStr  = terrainReel + penetrometre;
+
+  const analyse = `Course ${course.type||''} sur ${course.dist||'?'} — Terrain ${terrStr}. `
+    + `${favLabel} s'impose comme favori logique du marché${favCote ? ` à ${favCote.toFixed(1)}` : ''}. `
+    + (sec ? `${secLabel} constitue la meilleure alternative. ` : '')
+    + `Pronostic établi sur la base des cotes officielles PMU.`;
+
+  const recommandation = `GAGNANT : ${favLabel}${favCote ? ` (${favCote.toFixed(1)})` : ''} — favori logique du marché.`
+    + (sec ? ` COUPLÉ : ${favLabel} › ${secLabel}.` : '')
+    + (isQ ? ` QUARTÉ : ${quarte.map(num => `N°${num}`).join('-')}.` : '');
+
+  addLoadingStep('done', `✓ ${actifs.length} partant(s) chargés`);
+  addLoadingStep('done', `✓ ${Object.keys(cotes).length} cotes PMU — terrain ${terrainReel}${penetrometre}`);
+  addLoadingStep('done', `✓ Favori : N°${favoriNum} ${fav.nom}${favCote ? ` à ${favCote.toFixed(1)}` : ''}`);
+
+  const result = {
+    favori: favoriNum, top5, classement: top5, couple,
+    ...(isQ ? { quarte, quinte } : {}),
+    selection, rapports, analyse, recommandation,
+    conditions: contexte.conditionCourse || (terrainReel !== 'Bon' ? `Terrain ${terrStr}.` : null),
+  };
+
+  cache[key] = result;
+  render(result, isQ);
 }
 
 function updateLoadingText(msg) {
@@ -1850,8 +1765,9 @@ function render(data, isQ) {
           ? `<div class="cote-live" style="opacity:0.45;font-size:0.58rem;">IA ${h.cote}</div>`
           : `<div class="cote-live">~ ${h.cote}</div>`)
         : '';
+      const verdictLabels = { FAVORI:'FAVORI', DANGER:'OUTSIDER DANGEREUX', SURVEILLER:'À SURVEILLER', EVITER:'À ÉVITER', OUTSIDER:'OUTSIDER', INTERESSANT:'INTÉRESSANT' };
       const verdictBadge = (h.verdict && h.verdict !== 'NEUTRE' && h.verdict !== 'UNKNOWN' && !h.non_partant)
-        ? `<span class="verdict verdict-${h.verdict}">${h.verdict.replace('_', ' ')}</span>`
+        ? `<span class="verdict verdict-${h.verdict}">${verdictLabels[h.verdict] || h.verdict.replace('_', ' ')}</span>`
         : '';
       // analyse_cheval = texte expert principal (format "N°X NOM - Driver : ... VERDICT.")
       const analyseHorse = (h.analyse_cheval || h.analyse)
