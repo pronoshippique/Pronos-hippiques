@@ -1627,13 +1627,16 @@ async function generate(course, key) {
     ? `  "quarte": [NUM1, NUM2, NUM3, NUM4],\n  "quinte": [NUM1, NUM2, NUM3, NUM4, NUM5],`
     : '';
 
-  const systemPrompt = `Tu es un expert hippique indépendant. RÈGLES ABSOLUES :
-1. Le favori = TOUJOURS le cheval avec la cote la plus basse
-2. top5 = les 5 chevaux avec les cotes les plus basses, triés du moins cher au plus cher
-3. Le numéro dans favori DOIT être identique au premier numéro de top5
-4. Pour chaque cheval écris 2 phrases minimum avec son nom, son driver et un argument
-5. Ne mentionne jamais PMU, Equidia, Geny ou tout autre site
-6. Réponds UNIQUEMENT en JSON valide, rien d'autre`;
+  const systemPrompt = `Tu es un expert hippique indépendant. Tu analyses les courses hippiques de manière professionnelle.
+
+RÈGLES ABSOLUES QUE TU NE PEUX PAS VIOLER :
+1. Trie les chevaux par cote croissante : la cote la plus basse = favori absolu
+2. Le champ "favori" = le numéro du cheval avec la cote la plus basse
+3. "top5" = exactement [favori, 2eme_cote, 3eme_cote, 4eme_cote, 5eme_cote]
+4. Pour CHAQUE cheval dans "analyses" écris OBLIGATOIREMENT : "N°X NOM (Driver) : [commentaire sur la cote et les chances]. [Verdict : FAVORI LOGIQUE / OUTSIDER INTÉRESSANT / À ÉVITER]."
+5. Ne jamais mettre les numéros 1,2,3,4,5,6 dans l'ordre séquentiel dans top5
+6. Cohérence absolue entre favori, top5, gagnant et couple
+7. Ne jamais mentionner PMU, Equidia, Geny ou tout autre site`;
 
   const prompt = `Course : ${course.nom} à ${hippo} - ${course.dist||'?'} - ${course.type||''} - Terrain: ${terrain}
 Nombre de partants : ${partants.length}
