@@ -1561,24 +1561,9 @@ async function loadPartantsPreview(course) {
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
-  const alreadyLoaded = !!(course.partantsData?.length);
-  updateLoadingText(alreadyLoaded ? '⟳ Agent 2 — Historiques & IA...' : '⟳ Agent 1 — Partants PMU...');
+  // Les partants sont déjà dans course.partantsData (chargés par loadPartantsPreview avant generate())
+  updateLoadingText('⟳ Historiques & analyse IA...');
   clearLoadingSteps();
-
-  // Fetch real participants from PMU via proxy
-  if (course.numReunion && course.numCourse && course.dateStr && !course.partantsData?.length) {
-    console.log(`[PMU] Participants → /api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
-    try {
-      const pResp = await fetch(`/api/participants?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
-      const pData = await pResp.json();
-      console.log('[PMU] Participants result:', pData.success, pData.participants?.length, 'partants', pData.error || '');
-      if (pData.success && pData.participants?.length) {
-        course.partantsData = pData.participants;
-      }
-    } catch (e) { console.error('[PMU] Participants fetch error:', e.message); }
-  } else {
-    console.log(`[PMU] Skip participants — numReunion:${course.numReunion} numCourse:${course.numCourse} dateStr:${course.dateStr} partantsData:${course.partantsData?.length||0}`);
-  }
 
   updateLoadingText('⟳ Agent 2 — Cotes & historiques...');
   // Fetch cotes and career history in parallel
@@ -1637,7 +1622,7 @@ async function generate(course, key) {
   const infoPartants = hasRealPartants
     ? `PARTANTS OFFICIELS (${partantsReels.length}):\n${partantsReels.map(buildPartantLine).join('\n')}`
       + (nonPartantsReels.length ? `\nNON-PARTANTS: ${nonPartantsReels.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}` : '')
-    : `Nombre de partants: ${n}. Crée des noms de chevaux PMU réalistes avec jockeys français/belges et musiques réalistes.`;
+    : `Données partants non disponibles. Analyse basée sur les paramètres connus uniquement : ${course.type} sur ${course.dist}, ${n} partants déclarés, terrain ${course.terrain}. N'invente AUCUN nom de cheval ou jockey.`;
 
   const langNote = currentLang !== 'fr'
     ? `\nIMPORTANT: Write all text fields (analyse_cheval, analyse, conditions, recommandation) in language: ${currentLang}. Keep horse names, jockey names, and numbers unchanged.`
@@ -1649,20 +1634,14 @@ async function generate(course, key) {
 
   const systemPrompt = `Tu es Henri Blanc, expert hippique professionnel avec 25 ans d'expérience comme consultant pour les plus grands haras de France. Tu analyses chaque course avec rigueur et précision.
 
-RÈGLE DE COHÉRENCE ABSOLUE — tu ne peux jamais la violer :
-- "favori" = numéro du cheval que tu sélectionnes GAGNANT (un seul numéro entier)
-- "top5[0]" DOIT être égal à "favori"
-- "couple[0]" DOIT être égal à "favori"
-- "quarte[0]" et "quinte[0]" DOIVENT être égaux à "favori"
-- Le cheval avec ce numéro dans "selection" DOIT avoir verdict:"FAVORI" et la confiance la plus haute
+RÈGLE ABSOLUE : Le champ favori, le premier élément de top5, et le premier élément de couple doivent être EXACTEMENT le même numéro de dossard. Si tu mets le dossard 3 en favori, il doit être N°1 dans top5 et N°1 dans couple. Toute incohérence est interdite.
 
-FORMAT "analyse_cheval" OBLIGATOIRE pour chaque cheval :
-"N°X NOM - Driver/Jockey Prénom Nom : [forme récente précise avec résultats chiffrés]. [adéquation terrain/distance]. VERDICT EN MAJUSCULES."
-Exemple : "N°10 VOLTAIRE DE MEAD - Driver P. Raffin : 3 victoires consécutives sur terrain souple, forme brillante. Parfaitement adapté au 2175m de Vincennes. FAVORI LOGIQUE."
-Exemple : "N°1 IDAHO MAIL - Driver E. Lemaitre : N'a pas gagné depuis 2 mois, musique irrégulière. Distance légèrement longue pour ses aptitudes actuelles. OUTSIDER."
+FORMAT OBLIGATOIRE pour chaque cheval dans analyse_cheval — minimum 2 phrases avec arguments réels basés sur les données fournies :
+"N°3 NOM_CHEVAL (Jockey X) : [analyse forme et jockey avec données chiffrées]. [Verdict : FAVORI / OUTSIDER DANGEREUX / À SURVEILLER / À ÉVITER]."
+Exemple : "N°3 VOLTAIRE DE MEAD (Driver P. Raffin) : 3 victoires consécutives sur terrain souple, musique 1p1p2p — forme brillante, Raffin au sommet de sa forme avec 28% de victoires ce mois. Parfaitement adapté au 2175m de Vincennes, distance gagnée 4 fois cette saison. Verdict : FAVORI."
+Exemple : "N°1 IDAHO MAIL (Driver E. Lemaitre) : N'a pas gagné depuis 2 mois, musique 3a5p0p — forme irrégulière, Lemaitre en méforme relative (12% de victoires). Distance légèrement longue pour ses aptitudes actuelles, préfère le 1600m. Verdict : À ÉVITER."
 
-INTERDIT : pronostics incohérents, favori absent du top5, analyse sans arguments chiffrés.
-
+N'invente AUCUN nom de cheval ou de jockey. Utilise UNIQUEMENT les partants fournis dans le prompt.
 Tu réponds TOUJOURS avec un JSON valide uniquement, sans aucun texte avant ou après.`;
 
   const prompt = `Analyse experte de cette course PMU:
