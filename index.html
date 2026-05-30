@@ -1460,6 +1460,7 @@ async function selectCourse(rid, cid) {
     document.getElementById('pronoBlock').classList.remove('active');
     document.getElementById('loadingWrap').style.display = 'none';
     // Charge les partants + cotes pour le descriptif, puis lance l'IA
+    course.hippodrome = course.hippodrome || reunion.hippodrome || '';
     await loadPartantsPreview(course);
     document.getElementById('loadingWrap').style.display = 'flex';
     generate(course, key);
@@ -1558,65 +1559,42 @@ async function loadPartantsPreview(course) {
   }).join('');
 }
 
-// ── GÉNÉRATION PRONOSTICS BASÉS SUR LES COTES ──
+// ── GÉNÉRATION PRONOSTICS IA (basée sur les cotes PMU) ──
 async function generate(course, key) {
   const isQ = course.quinte;
-  const n = course.part || 10;
+  const n   = course.part || 10;
 
   updateLoadingText('⟳ Chargement des cotes...');
   clearLoadingSteps();
 
-  // Fetch cotes + Geny contexte en parallèle
-  const [cotesResult, contexteResult] = await Promise.allSettled([
-    (async () => {
-      if (course.cotesData) return course.cotesData;
-      if (!course.numReunion || !course.numCourse || !course.dateStr) return {};
+  // Fetch cotes PMU seulement
+  if (!course.cotesData && course.numReunion && course.numCourse && course.dateStr) {
+    try {
       const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
       const d = await r.json();
-      return d.success ? d.cotes : {};
-    })(),
-    (async () => {
-      if (!course.numReunion || !course.numCourse || !course.dateStr) return {};
-      try {
-        const r = await fetch(`/api/contexte?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
-        const d = await r.json();
-        return d.success ? d : {};
-      } catch(e) { return {}; }
-    })(),
-  ]);
+      course.cotesData = d.success ? d.cotes : {};
+    } catch(e) { course.cotesData = {}; }
+  }
+  const cotes = course.cotesData || {};
 
-  course.cotesData = cotesResult.status === 'fulfilled' ? cotesResult.value : {};
-  const contexte   = contexteResult.status === 'fulfilled' ? contexteResult.value : {};
-  const terrainReel   = contexte.terrain || course.terrain || 'Bon';
-  const penetrometre  = contexte.penetrometre ? ` (Pén. ${contexte.penetrometre})` : '';
-  const genyHorses = {};
-  if (Array.isArray(contexte.horses)) contexte.horses.forEach(h => { genyHorses[h.num] = h; });
-
-  const cotes       = course.cotesData || {};
   const allPartants = [...(course.partantsData || [])].sort((a, b) => (a.numPmu||0) - (b.numPmu||0));
-  const actifs      = allPartants.filter(p => !p.nonPartant);
-  const nonPart     = allPartants.filter(p => p.nonPartant);
+  const actifs  = allPartants.filter(p => !p.nonPartant);
+  const nonPart = allPartants.filter(p => p.nonPartant);
 
-  // Si aucun partant → fallback
   if (!actifs.length) {
     const fb = fallback(n, isQ, course.partantsData, cotes);
-    cache[key] = fb;
-    render(fb, isQ);
-    return;
+    cache[key] = fb; render(fb, isQ); return;
   }
 
-  // Résolution de la cote pour un cheval (PMU > Geny live > Geny ref > indiceCote)
+  // Résolution de cote PMU (ou indiceCote en fallback)
   const getCote = (p) => {
     const v = parseFloat(cotes[p.numPmu]);
     if (v > 0) return v;
-    const gH = genyHorses[p.numPmu];
-    if (gH?.coteLive) { const w = parseFloat(gH.coteLive); if (w > 0) return w; }
-    if (gH?.coteRef)  { const w = parseFloat(gH.coteRef);  if (w > 0) return w; }
     if (p.indiceCote) return p.indiceCote / 10;
     return null;
   };
 
-  // Tri par cote croissante (null = fin de liste)
+  // Tri par cote croissante — sert de vérité terrain pour la cohérence
   const sorted = [...actifs].sort((a, b) => {
     const ca = getCote(a), cb = getCote(b);
     if (ca === null && cb === null) return 0;
@@ -1624,97 +1602,125 @@ async function generate(course, key) {
     if (cb === null) return -1;
     return ca - cb;
   });
-
-  const rankMap = {};
-  sorted.forEach((p, i) => { rankMap[p.numPmu] = i; });
   const favoriNum = sorted[0].numPmu;
 
-  const getVerdict = (rank, cote) => {
-    if (rank === 0) return 'FAVORI';
-    if (rank === 1 || (cote !== null && cote <= 5)) return 'DANGER';
-    if (rank <= 3 || (cote !== null && cote <= 12)) return 'SURVEILLER';
-    return 'EVITER';
-  };
+  // Prompt partants pour l'IA
+  const partantsStr = actifs.map(p => {
+    const cote = getCote(p);
+    return `N°${p.numPmu} ${p.nom} (${p.driver||''}) - Cote: ${cote ? cote.toFixed(1) : 'NC'}`;
+  }).join('\n');
 
-  const getAnalyse = (p, cote, rank) => {
-    const j  = p.driver ? ` (${p.driver})` : '';
-    const cs = cote !== null ? cote.toFixed(1) : '?';
-    if (rank === 0) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Grand favori du marché, les parieurs lui font largement confiance. Cote très basse indiquant une forme exceptionnelle. JOUER.`;
-    if (rank === 1) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Second choix des parieurs, solide alternative au favori. Inclure en couplé gagnant.`;
-    if (cote !== null && cote <= 5) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Bien coté, les parieurs le voient parmi les candidats sérieux. Outsider dangereux à intégrer dans les combinaisons.`;
-    if (cote !== null && cote <= 10) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Outsider intéressant, cote attractive. À inclure dans les combinaisons.`;
-    if (cote !== null && cote <= 25) return `N°${p.numPmu} ${p.nom}${j} (cote ${cs}) : Cote élevée, marché peu confiant. À surveiller uniquement en combinaison.`;
-    return `N°${p.numPmu} ${p.nom}${j} (${cote !== null ? `cote ${cs}` : 'non coté'}) : Grosse cote, longshot. À éviter sauf surprise.`;
-  };
+  const nonPartStr = nonPart.length
+    ? `\nNon-partants : ${nonPart.map(p => `N°${p.numPmu} ${p.nom}`).join(', ')}`
+    : '';
 
-  // Confiance inversement proportionnelle à la cote (échelle logarithmique)
-  const getConfiance = (cote) => {
-    if (cote === null) return 30;
-    return Math.round(Math.max(5, Math.min(92, 100 - Math.log(Math.max(cote, 1.01)) * 28)));
-  };
+  const hippo   = course.hippodrome || '';
+  const terrain = course.terrain || 'Bon';
+  const isQStr  = isQ ? ' | ⭐ QUINTÉ+' : '';
+  const quinteSelSchema = isQ ? `,"quarte":[N1,N2,N3,N4],"quinte":[N1,N2,N3,N4,N5]` : '';
+  const deuxSur4Schema  = n >= 10 ? `,"2_sur_4":"Xx"` : '';
+  const quinteRapSchema = isQ ? `,"quarte":"85x","quinte":"180x","quinte_ordre":"2500x"` : '';
+  const quarteReco      = isQ ? ` QUARTÉ : N1-N2-N3-N4.` : '';
 
-  const selection = allPartants.map(p => {
-    if (p.nonPartant) {
-      return {
+  addLoadingStep('done', `✓ ${actifs.length} partant(s) chargés`);
+  addLoadingStep('done', `✓ ${Object.keys(cotes).length} cotes PMU`);
+  addLoadingStep('active', '🤖 Analyse IA en cours...');
+
+  const systemPrompt = `Tu es un expert hippique indépendant. Tu analyses les courses de manière professionnelle basée sur les cotes des chevaux. RÈGLES ABSOLUES :
+- Ne jamais classer les chevaux dans l'ordre 1,2,3,4,5
+- Le favori = le cheval avec la cote la plus basse
+- Top 5 = classés par cote croissante
+- Ne jamais mentionner PMU, Equidia, Geny ou tout autre site
+- Toujours écrire 2-3 phrases argumentées par cheval
+- Cohérence absolue : favori = 1er du top5 = 1er des sélections`;
+
+  const prompt = `Course : ${course.nom} - ${hippo} - ${course.dist||'?'} - ${course.type||''} - Terrain: ${terrain}${isQStr}
+Partants avec cotes :
+${partantsStr}${nonPartStr}
+
+Génère en JSON strict :
+{"favori":N,"top5":[N1,N2,N3,N4,N5],"couple":[N1,N2]${quinteSelSchema},"selection":[{"num":1,"nom":"NOM","cote":"X.X","verdict":"EVITER","analyse_cheval":"N°1 NOM (Driver) : phrase 1. phrase 2."},{"num":N1,"nom":"NOM_FAV","cote":"X.X","verdict":"FAVORI","analyse_cheval":"N°N1 NOM_FAV (Driver) : phrase 1. phrase 2. JOUER."}],"rapports":{"gagnant":"X.Xx","place":"X.Xx","couple":"Xx"${deuxSur4Schema}${quinteRapSchema}},"recommandation":"GAGNANT : N°N1 NOM_FAV (X.X) — favori logique.${quarteReco}","analyse":"3 phrases sur la course et la hiérarchie."}`;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+
+    const txt = data.content.filter(b => b.type === "text").map(b => b.text).join('');
+    let result = null;
+    try { result = JSON.parse(txt.trim()); } catch(_) {}
+    if (!result) {
+      try {
+        const s = txt.indexOf('{'), e = txt.lastIndexOf('}');
+        if (s !== -1 && e !== -1) result = JSON.parse(txt.slice(s, e + 1));
+      } catch(_) {}
+    }
+    if (!result) throw new Error('JSON non parseable');
+
+    // Cohérence : favori = cheval avec la cote PMU la plus basse (priorité sur l'IA)
+    result.classement = Array.isArray(result.top5) ? result.top5.slice(0, 5) : [];
+    const forceFirst = (arr, num, max) => {
+      if (!num || !Array.isArray(arr)) return arr;
+      return arr[0] === num ? arr.slice(0, max) : [num, ...arr.filter(x => x !== num)].slice(0, max);
+    };
+    result.classement = forceFirst(result.classement, favoriNum, 5);
+    result.couple     = forceFirst(result.couple, favoriNum, 2);
+    if (isQ) {
+      result.quarte = forceFirst(result.quarte || sorted.slice(0,4).map(p=>p.numPmu), favoriNum, 4);
+      result.quinte = forceFirst(result.quinte || sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
+    }
+
+    // Re-ancrage aux vrais partants PMU
+    const aiByNum = {};
+    for (const h of (result.selection || [])) aiByNum[h.num] = h;
+
+    const getConfiance = (cote) => cote
+      ? Math.round(Math.max(5, Math.min(92, 100 - Math.log(Math.max(cote, 1.01)) * 28)))
+      : 40;
+
+    result.selection = allPartants.map(p => {
+      if (p.nonPartant) return {
         num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
         favori: false, non_partant: true, cote: null, cotePmu: null,
         verdict: 'NEUTRE', analyse_cheval: `N°${p.numPmu} ${p.nom} : Non-partant.`, confiance: 0,
       };
-    }
-    const cote = getCote(p);
-    const rank = rankMap[p.numPmu] ?? 99;
-    return {
-      num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
-      favori: rank === 0, non_partant: false,
-      cote: cote !== null ? cote.toFixed(1) : null,
-      cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
-      verdict: getVerdict(rank, cote),
-      analyse_cheval: getAnalyse(p, cote, rank),
-      confiance: getConfiance(cote),
-    };
-  });
+      const ai   = aiByNum[p.numPmu] || {};
+      const isFav = p.numPmu === favoriNum;
+      const coteV = getCote(p);
+      return {
+        num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
+        favori: isFav, non_partant: false,
+        cote: ai.cote || (coteV ? coteV.toFixed(1) : null),
+        cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
+        verdict: isFav ? 'FAVORI' : (ai.verdict || 'EVITER'),
+        analyse_cheval: ai.analyse_cheval || ai.analyse || null,
+        confiance: getConfiance(coteV),
+      };
+    });
 
-  const top5   = sorted.slice(0, 5).map(p => p.numPmu);
-  const couple  = sorted.slice(0, 2).map(p => p.numPmu);
-  const quarte  = sorted.slice(0, 4).map(p => p.numPmu);
-  const quinte  = sorted.slice(0, 5).map(p => p.numPmu);
+    // 2 sur 4 garanti pour toutes les courses avec 10+ partants
+    const rpts = result.rapports || {};
+    if (n >= 10 && !rpts['2_sur_4']) rpts['2_sur_4'] = '8x';
+    result.rapports = rpts;
 
-  const favCote = getCote(sorted[0]);
-  const secCote = sorted[1] ? getCote(sorted[1]) : null;
-  const gagnantR = favCote  ? `${favCote.toFixed(1)}x`                            : '4.2x';
-  const placeR   = favCote  ? `${Math.max(1.1, favCote * 0.37).toFixed(1)}x`      : '1.8x';
-  const coupleR  = (favCote && secCote) ? `${Math.round(favCote * secCote * 0.6)}x` : '12x';
-  const rapports = { gagnant: gagnantR, place: placeR, couple: coupleR };
-  if (n >= 10) rapports['2_sur_4'] = '8x';
-  if (isQ) { rapports.quarte = '85x'; rapports.quinte = '180x'; rapports.quinte_ordre = '2500x'; }
+    cache[key] = result;
+    render(result, isQ);
 
-  const fav      = sorted[0], sec = sorted[1];
-  const favLabel = `N°${fav.numPmu} ${fav.nom}`;
-  const secLabel = sec ? `N°${sec.numPmu} ${sec.nom}` : '';
-  const terrStr  = terrainReel + penetrometre;
-
-  const analyse = `Course ${course.type||''} sur ${course.dist||'?'} — Terrain ${terrStr}. `
-    + `${favLabel} s'impose comme favori logique du marché${favCote ? ` à ${favCote.toFixed(1)}` : ''}. `
-    + (sec ? `${secLabel} constitue la meilleure alternative. ` : '')
-    + `Pronostic établi sur la base des cotes officielles PMU.`;
-
-  const recommandation = `GAGNANT : ${favLabel}${favCote ? ` (${favCote.toFixed(1)})` : ''} — favori logique du marché.`
-    + (sec ? ` COUPLÉ : ${favLabel} › ${secLabel}.` : '')
-    + (isQ ? ` QUARTÉ : ${quarte.map(num => `N°${num}`).join('-')}.` : '');
-
-  addLoadingStep('done', `✓ ${actifs.length} partant(s) chargés`);
-  addLoadingStep('done', `✓ ${Object.keys(cotes).length} cotes PMU — terrain ${terrainReel}${penetrometre}`);
-  addLoadingStep('done', `✓ Favori : N°${favoriNum} ${fav.nom}${favCote ? ` à ${favCote.toFixed(1)}` : ''}`);
-
-  const result = {
-    favori: favoriNum, top5, classement: top5, couple,
-    ...(isQ ? { quarte, quinte } : {}),
-    selection, rapports, analyse, recommandation,
-    conditions: contexte.conditionCourse || (terrainReel !== 'Bon' ? `Terrain ${terrStr}.` : null),
-  };
-
-  cache[key] = result;
-  render(result, isQ);
+  } catch(e) {
+    const fb = fallback(n, isQ, course.partantsData, cotes);
+    cache[key] = fb;
+    render(fb, isQ);
+  }
 }
 
 function updateLoadingText(msg) {
