@@ -1795,15 +1795,21 @@ ${rapportsContent}
   }
 }`;
 
-  const callClaude = async (sysprompt, userprompt) => {
-    const resp = await fetch("/api/ai", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
+  const callClaude = async () => {
+    const resp = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 6000,
-        system: sysprompt,
-        messages: [{ role: "user", content: userprompt }]
+        partants: actifs.map(p => ({ numero: p.numPmu, nom: p.nom, driver: p.driver||'?', musique: p.musique||'NC' })),
+        course: {
+          nom: course.nom,
+          hippodrome: hippo,
+          dist: course.dist,
+          type: course.type,
+          terrain: terrain
+        },
+        langue: langue || 'français',
+        isQuinte: isQ
       })
     });
     const data = await resp.json();
@@ -1840,7 +1846,7 @@ ${rapportsContent}
   };
 
   try {
-    let result = await callClaude(systemPrompt, userPrompt);
+    let result = await callClaude();
     updateLastLoadingStep('done', '✓ Analyse IA reçue');
 
     // Agent 3: validate — retry once if critical issues found
@@ -1849,7 +1855,7 @@ ${rapportsContent}
       addLoadingStep('active', `⟳ Correction: ${issues[0]}...`);
       const correctionPrompt = `${userPrompt}\n\nCORRECTION REQUISE — Problèmes détectés: ${issues.join('; ')}.\nRenvoie un JSON COMPLET et VALIDE avec tous les champs.`;
       try {
-        result = await callClaude(systemPrompt, correctionPrompt);
+        result = await callClaude();
         updateLastLoadingStep('done', '✓ JSON corrigé et validé');
       } catch(_) {
         updateLastLoadingStep('warn', '⚠ Correction partielle');
