@@ -1713,6 +1713,8 @@ Langue de réponse: ${langue}
 DONNÉES DES PARTANTS:
 ${horsesData}
 
+IMPORTANT : Le champ de présentation doit s'appeler EXACTEMENT 'texte' (pas 'presentation', pas 'description', pas 'analyse'). Le champ 'texte' doit contenir un paragraphe de 5-8 lignes minimum analysant la course, les favoris et les outsiders avec leurs noms et jockeys.
+
 Réponds UNIQUEMENT en JSON valide (numéros disponibles: ${actifs.map(p=>p.numPmu).join(', ')}):
 {
   "texte": "Présentation de '${course.nom}' à ${hippo}. Commence par une analyse du favori: 'N°${favoriNum} ${nomFavori} avec ${driverFavori} est le favori logique avec une cote de ${coteFavori}...'. Mentionne les outsiders dangereux${outsiders ? ' (notamment '+outsiders+')' : ''}. Impact du terrain ${terrain} sur les chances. 5-8 lignes en ${langue}.",
@@ -1751,6 +1753,12 @@ ${deux_sur_4Line}${quarteRapportLines}  }
       if (s !== -1 && e !== -1) try { parsed = JSON.parse(txt.slice(s, e+1)); } catch(_) {}
     }
     if (!parsed) throw new Error('JSON invalide');
+    console.log("JSON reçu de l'IA:", JSON.stringify(parsed).substring(0, 500));
+    if (!parsed.texte && parsed.presentation) parsed.texte = parsed.presentation;
+    if (!parsed.texte && parsed.description)  parsed.texte = parsed.description;
+    if (!parsed.texte && parsed.analyse)      parsed.texte = parsed.analyse;
+    if (!parsed.texte && parsed.summary)      parsed.texte = parsed.summary;
+    if (!parsed.texte) parsed.texte = "Analyse en cours...";
     return parsed;
   };
 
