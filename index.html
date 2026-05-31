@@ -291,6 +291,7 @@ nav {
 .loading-step { font-family:'DM Mono',monospace; font-size:0.6rem; color:var(--cream-dim); letter-spacing:0.06em; display:flex; align-items:center; gap:8px; }
 .loading-step.done { color:var(--green-light); }
 .loading-step.active { color:var(--gold); }
+.loading-step.warn { color:#E8A030; }
 
 /* COURSE DESCRIPTIF */
 .course-descriptif { margin-bottom:24px; }
@@ -1563,14 +1564,20 @@ async function loadPartantsPreview(course) {
   }).join('');
 }
 
-// ── GÉNÉRATION PRONOSTICS IA ──
+// ── GÉNÉRATION PRONOSTICS IA — ARCHITECTURE MULTI-AGENTS ──
 async function generate(course, key) {
   const isQ = course.quinte;
   const n = course.part || 10;
+  const langCode = localStorage.getItem('ph_lang') || 'fr';
+  const langNames = { fr:'français', en:'anglais', es:'espagnol', de:'allemand', it:'italien', ar:'arabe', tr:'turc' };
+  const langue = langNames[langCode] || 'français';
 
-  updateLoadingText('⟳ Chargement des cotes...');
+  updateLoadingText('⟳ Collecte des données...');
   clearLoadingSteps();
 
+  // ── AGENT 1 : COLLECTEUR DE DONNÉES ──
+
+  // 1a. Cotes PMU
   if (!course.cotesData && course.numReunion && course.numCourse && course.dateStr) {
     try {
       const r = await fetch(`/api/cotes?date=${course.dateStr}&r=${course.numReunion}&c=${course.numCourse}`);
@@ -1582,6 +1589,7 @@ async function generate(course, key) {
 
   const allPartants = [...(course.partantsData||[])].sort((a,b)=>(a.numPmu||0)-(b.numPmu||0));
   const actifs = allPartants.filter(p=>!p.nonPartant);
+  const nonPart = allPartants.filter(p=>p.nonPartant);
 
   if (!actifs.length) {
     const fb = fallback(n, isQ, course.partantsData, cotes);
@@ -1597,119 +1605,242 @@ async function generate(course, key) {
 
   const sorted = [...actifs].sort((a,b) => {
     const ca = getCote(a), cb = getCote(b);
-    if (ca === null && cb === null) return 0;
-    if (ca === null) return 1;
-    if (cb === null) return -1;
+    if (ca===null && cb===null) return 0;
+    if (ca===null) return 1;
+    if (cb===null) return -1;
     return ca - cb;
   });
   const favoriNum = sorted[0].numPmu;
 
+  addLoadingStep('done', `✓ ${actifs.length} partants — ${Object.keys(cotes).length} cotes PMU`);
+
+  // 1b. Historiques des chevaux (en parallèle avec l'affichage du step)
+  let carriere = {};
+  const horsesWithId = actifs.filter(p => p.chevalId);
+  if (horsesWithId.length > 0) {
+    addLoadingStep('active', `⟳ Récupération des historiques (${horsesWithId.length} chevaux)...`);
+    try {
+      const ids = horsesWithId.map(p => p.chevalId).join(',');
+      const r = await fetch(`/api/carriere?ids=${encodeURIComponent(ids)}`, { signal: AbortSignal.timeout(12000) });
+      const d = await r.json();
+      if (d.success && d.carriere) {
+        carriere = d.carriere;
+        const found = Object.keys(carriere).length;
+        updateLastLoadingStep('done', `✓ Historiques: ${found}/${horsesWithId.length} chevaux`);
+      } else {
+        updateLastLoadingStep('warn', '⚠ Historiques non disponibles');
+      }
+    } catch(e) {
+      updateLastLoadingStep('warn', '⚠ Historiques non disponibles');
+    }
+  }
+
+  // ── AGENT 2 : ANALYSTE EXPERT ──
+  updateLoadingText('🤖 Jean-Pierre Martin analyse la course...');
+  addLoadingStep('active', '🤖 Analyse experte en cours...');
+
   const hippo = course.hippodrome || '';
   const terrain = course.terrain || 'Bon';
-  const partantsList = actifs.map(p =>
-    `N°${p.numPmu} ${p.nom} driver:${p.driver||'?'} cote:${getCote(p)!==null?getCote(p).toFixed(1):'NC'}`
-  ).join('\n');
+  const nonPartStr = nonPart.length
+    ? `\nNon-partants: ${nonPart.map(p=>`N°${p.numPmu} ${p.nom}`).join(', ')}`
+    : '';
 
-  addLoadingStep('done', `✓ ${actifs.length} partant(s) chargés`);
-  addLoadingStep('done', `✓ ${Object.keys(cotes).length} cotes PMU`);
-  addLoadingStep('active', '🤖 Analyse IA en cours...');
+  // Build rich horses data block for prompt
+  const horsesData = actifs.map(p => {
+    const coteV = getCote(p);
+    const coteStr = coteV !== null ? coteV.toFixed(1) : 'NC';
+    const lines = [`N°${p.numPmu} ${p.nom} | Driver/Jockey: ${p.driver||'?'} | Âge: ${p.age||'?'} | Cote: ${coteStr}`];
+    const hist = p.chevalId ? carriere[p.chevalId] : null;
+    if (hist) {
+      lines.push(`  Palmarès: ${hist.wins}V ${hist.places}P / ${hist.total} courses`);
+      if (hist.courses?.length > 0) {
+        const last = hist.courses.slice(0,5).map(c =>
+          `${c.position||'?'}/${c.partants||'?'}(${c.distance} ${c.hippodrome} ${c.date})`
+        ).join(' → ');
+        lines.push(`  Dernières: ${last}`);
+      }
+    }
+    return lines.join('\n');
+  }).join('\n\n');
 
-  const systemPrompt = `Tu es un expert hippique. Réponds uniquement en JSON valide.`;
+  const systemPrompt = `Tu es Jean-Pierre Martin, consultant hippique professionnel avec 30 ans d'expérience. Tu analyses chaque course avec une expertise absolue. Pour chaque cheval tu fournis :
+- Son historique récent : victoires, places, forme sur cette distance et ce terrain
+- L'analyse du jockey/driver : ses stats, sa forme actuelle, son affinité avec ce cheval
+- Les conditions favorables ou défavorables pour ce cheval aujourd'hui
+- Un verdict clair et argumenté
 
-  const prompt = `Voici les partants de la course ${course.nom} à ${hippo}, distance ${course.dist||'?'}, terrain ${terrain}:\n${partantsList}\n\nRéponds en JSON:\n{\n  "favori": numero_cheval_cote_la_plus_basse,\n  "top5": [5 numeros triés par cote croissante],\n  "texte": "Un paragraphe de 5 lignes minimum analysant la course et les favoris avec leurs noms",\n  "analyses": {"1": "N°1 NOM: analyse 2 phrases.", "2": "..."},\n  "gagnant": numero,\n  "couple": [num1, num2],\n  "rapports": {"gagnant": "Xx", "place": "Xx", "couple": "Xx", "deux_sur_4": "Xx"}\n}`;
+Tu génères OBLIGATOIREMENT :
+1. Un paragraphe de présentation de la course (5-8 lignes minimum)
+2. Une fiche détaillée pour CHAQUE cheval (3-4 phrases minimum par cheval)
+3. Un classement Top 5 logique basé sur les données réelles
+4. Des sélections cohérentes : Gagnant, Couplé, Quarté, Quinté si applicable, 2sur4 si 10+ partants
+5. Des rapports de gains estimés réalistes
 
-  try {
+RÈGLES ABSOLUES :
+- Le favori = cheval avec la cote la plus basse
+- Top5 trié par cote croissante
+- Cohérence totale entre favori, top5 et sélections
+- Jamais de classement 1,2,3,4,5,6 séquentiel
+- Jamais mentionner PMU, Equidia ou tout autre site
+- Toujours écrire le texte dans la langue choisie par l'utilisateur`;
+
+  const quinteBlock = isQ
+    ? `  "quarte": [4 numéros triés],\n  "quinte": [5 numéros triés],\n`
+    : '';
+  const deux_sur_4Line = n >= 10 ? `    "deux_sur_4": "Xx",\n` : '';
+  const quarteRapportLines = isQ ? `    "quarte": "Xx",\n    "quinte": "Xx",\n` : '';
+
+  const userPrompt = `Course: ${course.nom}
+Hippodrome: ${hippo} | Distance: ${course.dist||'?'} | Type: ${course.type||''} | Terrain: ${terrain}
+Partants actifs: ${actifs.length}${nonPartStr}
+Langue de réponse: ${langue}
+
+DONNÉES DES PARTANTS:
+${horsesData}
+
+Réponds UNIQUEMENT en JSON valide (numéros disponibles: ${actifs.map(p=>p.numPmu).join(', ')}):
+{
+  "texte": "Présentation experte de la course en ${langue} (5-8 lignes minimum)",
+  "favori": ${favoriNum},
+  "top5": [${favoriNum}, num2, num3, num4, num5],
+  "analyses": {
+${actifs.map(p=>`    "${p.numPmu}": "Analyse experte 3-4 phrases de N°${p.numPmu} ${p.nom}"`).join(',\n')}
+  },
+  "gagnant": ${favoriNum},
+  "couple": [${favoriNum}, num2],
+${quinteBlock}  "rapports": {
+    "gagnant": "Xx",
+    "place": "Xx",
+    "couple": "Xx",
+${deux_sur_4Line}${quarteRapportLines}  }
+}`;
+
+  const callClaude = async (sysprompt, userprompt) => {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }]
+        max_tokens: 6000,
+        system: sysprompt,
+        messages: [{ role: "user", content: userprompt }]
       })
     });
-
     const data = await resp.json();
     if (data.error) throw new Error(data.error.message);
-
-    const txt = data.content.filter(b => b.type === "text").map(b => b.text).join('');
-    let result = null;
-    try { result = JSON.parse(txt.trim()); } catch(_) {}
-    if (!result) {
-      try {
-        const s = txt.indexOf('{'), e = txt.lastIndexOf('}');
-        if (s !== -1 && e !== -1) result = JSON.parse(txt.slice(s, e + 1));
-      } catch(_) {}
+    const txt = data.content.filter(b=>b.type==="text").map(b=>b.text).join('');
+    let parsed = null;
+    try { parsed = JSON.parse(txt.trim()); } catch(_) {}
+    if (!parsed) {
+      const s = txt.indexOf('{'), e = txt.lastIndexOf('}');
+      if (s !== -1 && e !== -1) try { parsed = JSON.parse(txt.slice(s, e+1)); } catch(_) {}
     }
-    if (!result) throw new Error('JSON non parseable');
+    if (!parsed) throw new Error('JSON invalide');
+    return parsed;
+  };
 
+  // ── AGENT 3 : VALIDATEUR ──
+  const validate = (result) => {
+    const issues = [];
+    if (!result.texte || result.texte.length < 80) issues.push('texte manquant ou trop court');
+    if (!Array.isArray(result.top5) || result.top5.length < 3) issues.push('top5 invalide');
+    const missingCount = actifs.filter(p =>
+      !result.analyses?.[String(p.numPmu)] && !result.analyses?.[p.numPmu]
+    ).length;
+    if (missingCount > Math.max(1, Math.floor(actifs.length * 0.3))) {
+      issues.push(`${missingCount} analyses manquantes`);
+    }
+    return issues;
+  };
+
+  try {
+    let result = await callClaude(systemPrompt, userPrompt);
+    updateLastLoadingStep('done', '✓ Analyse IA reçue');
+
+    // Agent 3: validate — retry once if critical issues found
+    const issues = validate(result);
+    if (issues.length > 0) {
+      addLoadingStep('active', `⟳ Correction: ${issues[0]}...`);
+      const correctionPrompt = `${userPrompt}\n\nCORRECTION REQUISE — Problèmes détectés: ${issues.join('; ')}.\nRenvoie un JSON COMPLET et VALIDE avec tous les champs.`;
+      try {
+        result = await callClaude(systemPrompt, correctionPrompt);
+        updateLastLoadingStep('done', '✓ JSON corrigé et validé');
+      } catch(_) {
+        updateLastLoadingStep('warn', '⚠ Correction partielle');
+      }
+    }
+
+    // Force coherence: favori always = lowest PMU cote
     const forceFirst = (arr, num, max) => {
       if (!num || !Array.isArray(arr)) return arr;
-      return arr[0] === num ? arr.slice(0, max) : [num, ...arr.filter(x => x !== num)].slice(0, max);
+      return arr[0]===num ? arr.slice(0,max) : [num,...arr.filter(x=>x!==num)].slice(0,max);
     };
     result.favori     = favoriNum;
-    result.classement = forceFirst(Array.isArray(result.top5) ? result.top5.slice(0,5) : sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
+    result.classement = forceFirst(Array.isArray(result.top5)?result.top5.slice(0,5):sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
     result.couple     = forceFirst(result.couple, favoriNum, 2);
     if (isQ) {
-      result.quarte = forceFirst(result.quarte || sorted.slice(0,4).map(p=>p.numPmu), favoriNum, 4);
-      result.quinte = forceFirst(result.quinte || sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
+      result.quarte = forceFirst(result.quarte||sorted.slice(0,4).map(p=>p.numPmu), favoriNum, 4);
+      result.quinte = forceFirst(result.quinte||sorted.slice(0,5).map(p=>p.numPmu), favoriNum, 5);
     }
 
+    // Build selection[] for render()
     const analyses = result.analyses || {};
     const rankMap  = {};
-    sorted.forEach((p, i) => { rankMap[p.numPmu] = i; });
+    sorted.forEach((p,i)=>{ rankMap[p.numPmu]=i; });
 
     const getConfiance = (cote) => cote
-      ? Math.round(Math.max(5, Math.min(92, 100 - Math.log(Math.max(cote, 1.01)) * 28)))
+      ? Math.round(Math.max(5, Math.min(92, 100-Math.log(Math.max(cote,1.01))*28)))
       : 40;
 
     const getVerdict = (rank, isFav) => {
       if (isFav) return 'FAVORI';
-      if (rank === 1) return 'DANGER';
-      if (rank <= 3) return 'SURVEILLER';
+      if (rank===1) return 'DANGER';
+      if (rank<=3) return 'SURVEILLER';
       return 'EVITER';
     };
 
     result.selection = allPartants.map(p => {
       if (p.nonPartant) return {
-        num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
-        favori: false, non_partant: true, cote: null, cotePmu: null,
-        verdict: 'NEUTRE', analyse_cheval: `N°${p.numPmu} ${p.nom} : Non-partant.`, confiance: 0,
+        num:p.numPmu, nom:p.nom, jockey:p.driver||'', age:p.age?`${p.age} ans`:'',
+        favori:false, non_partant:true, cote:null, cotePmu:null,
+        verdict:'NEUTRE', analyse_cheval:`N°${p.numPmu} ${p.nom} : Non-partant.`, confiance:0,
       };
-      const isFav = p.numPmu === favoriNum;
+      const isFav = p.numPmu===favoriNum;
       const coteV = getCote(p);
-      const rank  = rankMap[p.numPmu] ?? 99;
+      const rank  = rankMap[p.numPmu]??99;
       return {
-        num: p.numPmu, nom: p.nom, jockey: p.driver || '', age: p.age ? `${p.age} ans` : '',
-        favori: isFav, non_partant: false,
-        cote: coteV ? coteV.toFixed(1) : null,
-        cotePmu: cotes[p.numPmu] ? String(cotes[p.numPmu]) : null,
-        verdict: getVerdict(rank, isFav),
-        analyse_cheval: analyses[String(p.numPmu)] || analyses[p.numPmu] || null,
-        confiance: getConfiance(coteV),
+        num:p.numPmu, nom:p.nom, jockey:p.driver||'', age:p.age?`${p.age} ans`:'',
+        favori:isFav, non_partant:false,
+        cote:coteV?coteV.toFixed(1):null,
+        cotePmu:cotes[p.numPmu]?String(cotes[p.numPmu]):null,
+        verdict:getVerdict(rank, isFav),
+        analyse_cheval:analyses[String(p.numPmu)]||analyses[p.numPmu]||null,
+        confiance:getConfiance(coteV),
       };
     });
 
-    // Rapports : use AI rapports, remap deux_sur_4 → 2_sur_4, add quinte if needed
+    // Rapports: prefer AI values, fall back to cote-based calculation
     const aiRpts = result.rapports || {};
     const rpts = {};
     if (aiRpts.gagnant) rpts.gagnant = aiRpts.gagnant;
     if (aiRpts.place)   rpts.place   = aiRpts.place;
     if (aiRpts.couple)  rpts.couple  = aiRpts.couple;
     if (aiRpts.deux_sur_4 || n >= 10) rpts['2_sur_4'] = aiRpts.deux_sur_4 || '8x';
-    if (isQ) { rpts.quarte = '85x'; rpts.quinte = '180x'; rpts.quinte_ordre = '2500x'; }
+    if (isQ) {
+      rpts.quarte = aiRpts.quarte || '85x';
+      rpts.quinte = aiRpts.quinte || '180x';
+      rpts.quinte_ordre = '2500x';
+    }
     if (!rpts.gagnant) {
       const favCote = getCote(sorted[0]);
       const secCote = sorted[1] ? getCote(sorted[1]) : null;
       rpts.gagnant = favCote ? `${favCote.toFixed(1)}x` : '4.2x';
-      rpts.place   = favCote ? `${Math.max(1.1, favCote * 0.37).toFixed(1)}x` : '1.8x';
-      rpts.couple  = (favCote && secCote) ? `${Math.round(favCote * secCote * 0.6)}x` : '12x';
+      rpts.place   = favCote ? `${Math.max(1.1, favCote*0.37).toFixed(1)}x` : '1.8x';
+      rpts.couple  = (favCote&&secCote) ? `${Math.round(favCote*secCote*0.6)}x` : '12x';
       if (n >= 10) rpts['2_sur_4'] = '8x';
     }
     result.rapports = rpts;
-
-    result.analyse = result.texte || '';
+    result.analyse = '';
 
     cache[key] = result;
     render(result, isQ);
@@ -1733,6 +1864,13 @@ function addLoadingStep(type, text) {
   d.className = `loading-step ${type}`;
   d.textContent = text;
   el.appendChild(d);
+}
+
+function updateLastLoadingStep(type, text) {
+  const el = document.getElementById('loadingSteps');
+  if (!el || !el.lastChild) return;
+  el.lastChild.className = `loading-step ${type}`;
+  el.lastChild.textContent = text;
 }
 
 function clearLoadingSteps() {
