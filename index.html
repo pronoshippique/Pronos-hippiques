@@ -1765,8 +1765,10 @@ RÈGLES ABSOLUES :
   const quinteBlock = isQ
     ? `  "quarte": [4 numéros triés],\n  "quinte": [5 numéros triés],\n`
     : '';
-  const deux_sur_4Line = n >= 10 ? `    "deux_sur_4": "Xx",\n` : '';
-  const quarteRapportLines = isQ ? `    "quarte": "Xx",\n    "quinte": "Xx",\n` : '';
+  const rapportItems = ['    "gagnant": "Xx"', '    "place": "Xx"', '    "couple": "Xx"'];
+  if (n >= 10) rapportItems.push('    "deux_sur_4": "Xx"');
+  if (isQ) { rapportItems.push('    "quarte": "Xx"'); rapportItems.push('    "quinte": "Xx"'); }
+  const rapportsContent = rapportItems.join(',\n');
 
   const userPrompt = `Course: ${course.nom}
 Hippodrome: ${hippo} | Distance: ${course.dist||'?'} | Type: ${course.type||''} | Terrain: ${terrain}
@@ -1789,10 +1791,8 @@ ${sorted.map(p=>{const f=formeMap[p.numPmu];const ms=p.musique?`Musique ${f.summ
   "gagnant": ${favoriNum},
   "couple": [${favoriNum}, num2],
 ${quinteBlock}  "rapports": {
-    "gagnant": "Xx",
-    "place": "Xx",
-    "couple": "Xx",
-${deux_sur_4Line}${quarteRapportLines}  }
+${rapportsContent}
+  }
 }`;
 
   const callClaude = async (sysprompt, userprompt) => {
