@@ -37,6 +37,8 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(55000)
     });
     const data = await resp.json();
+    console.log('ANTHROPIC STATUS:', resp.status);
+    console.log('ANTHROPIC RESPONSE:', JSON.stringify(data).substring(0, 500));
     return res.status(resp.status).json(data);
   } catch(e) {
     return res.status(500).json({
