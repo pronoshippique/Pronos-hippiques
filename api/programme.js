@@ -1,3 +1,43 @@
+const PMU_HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+};
+
+async function fetchPartants(dateStr, numReunion, numCourse) {
+  try {
+    const resp = await fetch(
+      `https://online.turfinfo.api.pmu.fr/rest/client/1/programme/${dateStr}/R${numReunion}/C${numCourse}/participants?metier=INTERNET&fields=ALL`,
+      { headers: PMU_HEADERS, signal: AbortSignal.timeout(5000) }
+    );
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return (data.participants || []).map(p => ({
+      numPmu:     p.numPmu,
+      nom:        p.nom || '',
+      driver:     p.driver || '',
+      chevalId:   p.cheval?.id || p.idCheval || null,
+      driverId:   p.driverChange?.idDriver || p.idDriver || null,
+      age:        p.age || null,
+      sexe:       p.sexe || '',
+      musique:    p.musique || '',
+      indiceCote: p.indiceCote || null,
+      nonPartant: p.statut === 'NON_PARTANT',
+    }));
+  } catch(_) { return []; }
+}
+
+// Enrichit les 3 premières réunions françaises avec les vrais partants (en parallèle)
+async function enrichWithPartants(reunions) {
+  const targets = reunions.filter(r => r.pays === 'France').slice(0, 3);
+  await Promise.allSettled(
+    targets.flatMap(reu =>
+      reu.courses.map(async c => {
+        c.partantsData = await fetchPartants(c.dateStr, c.numReunion, c.numCourse);
+      })
+    )
+  );
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=600');
@@ -72,6 +112,7 @@ async function _handler(req, res) {
       }))
       .sort((a, b) => parseInt(a.id.slice(1)) - parseInt(b.id.slice(1)));
 
+    await enrichWithPartants(reunions);
     return res.json({ success: true, source: 'pmu', reunions });
 
   } catch (e) {
@@ -157,6 +198,7 @@ async function _handler(req, res) {
     reunions.sort((a, b) => parseInt(a.id.slice(1)) - parseInt(b.id.slice(1)));
     if (!reunions.length) throw new Error('boturfers: aucune réunion extraite');
 
+    await enrichWithPartants(reunions);
     return res.json({ success: true, source: 'boturfers', reunions });
 
   } catch (e2) {
@@ -232,6 +274,7 @@ async function _handler(req, res) {
     reunions.forEach(reu => reu.courses.sort((a, b) => parseInt(a.id.slice(1)) - parseInt(b.id.slice(1))));
 
     if (!reunions.length) throw new Error('Equidia: aucune réunion extraite');
+    await enrichWithPartants(reunions);
     return res.json({ success: true, source: 'equidia', reunions });
 
   } catch (e3) {
