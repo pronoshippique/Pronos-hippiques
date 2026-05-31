@@ -1,6 +1,13 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=600');
+  try { await _handler(req, res); } catch (fatal) {
+    console.error('programme.js FATAL:', fatal);
+    res.status(500).json({ success: false, error: fatal.message, stack: fatal.stack });
+  }
+}
+
+async function _handler(req, res) {
 
   // Date Paris (DDMMYYYY)
   const fmt = new Intl.DateTimeFormat('fr-FR', {
@@ -228,6 +235,7 @@ export default async function handler(req, res) {
     return res.json({ success: true, source: 'equidia', reunions });
 
   } catch (e3) {
-    res.json({ success: false, error: e3.message });
+    console.error('programme.js — tous les fallbacks ont échoué:', e3);
+    res.json({ success: false, error: e3.message, stack: e3.stack });
   }
 }
