@@ -284,7 +284,9 @@ nav {
 .reco-text { font-size:0.92rem; line-height:1.75; color:var(--cream); }
 
 /* TEXTE ANALYSE IA */
-.texte-analyse { background:rgba(201,168,76,0.04); border:1px solid rgba(201,168,76,0.2); border-left:4px solid var(--gold); padding:20px 24px; margin-bottom:28px; font-size:1.05rem; line-height:1.85; color:var(--cream); font-style:italic; }
+.texte-analyse { background:rgba(61,138,94,0.06); border:1px solid rgba(201,168,76,0.22); border-left:4px solid var(--green-light); padding:20px 24px; margin-bottom:28px; line-height:1.85; color:var(--cream); }
+.texte-analyse-label { font-family:'DM Mono',monospace; font-size:0.54rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--green-light); margin-bottom:12px; }
+.texte-analyse-body { font-size:1.0rem; font-style:italic; }
 
 /* LOADING STEPS */
 .loading-steps { display:flex; flex-direction:column; gap:4px; margin-top:14px; max-width:280px; }
@@ -328,6 +330,8 @@ nav {
 .p-num { font-family:'DM Mono',monospace; font-size:0.73rem; font-weight:700; padding:3px 9px; background:var(--dark-4); border:1px solid var(--border); color:var(--cream); }
 .p-num.p1 { background:rgba(201,168,76,0.15); border-color:rgba(201,168,76,0.5); color:var(--gold); }
 .p-sep { color:var(--cream-dim); font-size:0.6rem; }
+.palmares-2s4 { font-family:'DM Mono',monospace; font-size:0.62rem; color:var(--cream); flex:1; line-height:1.6; }
+.palmares-2s4-rpt { color:var(--gold); font-weight:700; margin-left:4px; }
 
 /* CONDITIONS */
 .conditions-card { background:var(--dark-3); border:1px solid var(--border); border-left:3px solid var(--green-light); padding:14px 18px; margin-bottom:28px; font-family:'DM Mono',monospace; font-size:0.65rem; color:var(--cream-dim); letter-spacing:0.04em; line-height:1.65; }
@@ -1896,7 +1900,10 @@ function render(data, isQ) {
   // ── Texte analyse IA ──
   const texteEl = document.getElementById('texteBlock');
   if (texteEl) texteEl.innerHTML = data.texte
-    ? `<div class="texte-analyse">${data.texte}</div>`
+    ? `<div class="texte-analyse">
+        <div class="texte-analyse-label">★ Présentation de la course</div>
+        <div class="texte-analyse-body">${data.texte}</div>
+      </div>`
     : '';
 
   const partants = data.selection.filter(h => !h.non_partant);
@@ -1971,6 +1978,9 @@ function render(data, isQ) {
   const joinNums = arr => arr.map((n,i) =>
     `${i>0?'<span class="p-sep">›</span>':''}${numBadge(n,i)}`).join('');
 
+  const selMap = {};
+  (data.selection||[]).forEach(h => { selMap[h.num] = h.nom; });
+
   const palRows = [];
   if (classement.length >= 2) palRows.push(`<div class="palmares-row">
     <span class="palmares-type">${t('main.top5')}</span>
@@ -1978,6 +1988,19 @@ function render(data, isQ) {
   if (couple.length >= 2) palRows.push(`<div class="palmares-row">
     <span class="palmares-type">${t('main.coupleLabel')}</span>
     <div class="palmares-nums">${joinNums(couple.slice(0,2))}</div></div>`);
+  const rpt2s4 = data.rapports?.['2_sur_4'];
+  if (rpt2s4 && classement.length >= 4) {
+    const quatre = classement.slice(0,4);
+    const horsesStr = quatre.map(num => {
+      const nom = selMap[num] || '';
+      const short = nom.split(' ').slice(0,2).join(' ');
+      return `N°${num}${short ? ' '+short : ''}`;
+    }).join(', ');
+    palRows.push(`<div class="palmares-row">
+      <span class="palmares-type">2 SUR 4</span>
+      <div class="palmares-2s4">${horsesStr}<span class="palmares-2s4-rpt"> — ${rpt2s4}</span></div>
+    </div>`);
+  }
   if (isQ && quarte.length >= 4) palRows.push(`<div class="palmares-row">
     <span class="palmares-type">${t('main.quarteLabel')}</span>
     <div class="palmares-nums">${joinNums(quarte.slice(0,4))}</div></div>`);
