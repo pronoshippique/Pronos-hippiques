@@ -36,9 +36,16 @@ export default async function handler(req, res) {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(55000)
     });
-    const data = await resp.json();
+    const respText = await resp.text();
     console.log('ANTHROPIC STATUS:', resp.status);
-    console.log('ANTHROPIC RESPONSE:', JSON.stringify(data).substring(0, 500));
+    console.log('ANTHROPIC RESPONSE:', respText.substring(0, 500));
+
+    let data;
+    try {
+      data = JSON.parse(respText);
+    } catch(e) {
+      return res.status(500).json({ error: 'Invalid JSON from Anthropic', raw: respText.substring(0, 200) });
+    }
     return res.status(resp.status).json(data);
   } catch(e) {
     return res.status(500).json({
