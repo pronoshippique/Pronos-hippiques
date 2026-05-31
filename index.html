@@ -1667,6 +1667,13 @@ async function generate(course, key) {
     return lines.join('\n');
   }).join('\n\n');
 
+  // Extract favori info for the prompt description
+  const favoriHorse  = sorted[0];
+  const nomFavori    = favoriHorse.nom || '';
+  const driverFavori = favoriHorse.driver || '?';
+  const coteFavori   = getCote(favoriHorse)?.toFixed(1) || 'NC';
+  const outsiders    = sorted.slice(1, 3).map(p => `N°${p.numPmu} ${p.nom} (${p.driver||'?'}, cote ${getCote(p)?.toFixed(1)||'NC'})`).join(' et ');
+
   const systemPrompt = `Tu es Jean-Pierre Martin, consultant hippique professionnel avec 30 ans d'expérience. Tu analyses chaque course avec une expertise absolue. Pour chaque cheval tu fournis :
 - Son historique récent : victoires, places, forme sur cette distance et ce terrain
 - L'analyse du jockey/driver : ses stats, sa forme actuelle, son affinité avec ce cheval
@@ -1674,7 +1681,11 @@ async function generate(course, key) {
 - Un verdict clair et argumenté
 
 Tu génères OBLIGATOIREMENT :
-1. Un paragraphe de présentation de la course (5-8 lignes minimum)
+1. Un paragraphe de présentation de la course (5-8 lignes minimum) qui doit impérativement inclure :
+   - Le nom de la course et l'hippodrome
+   - Une phrase sur le favori avec son driver : "N°X NOM avec DRIVER est le favori logique avec une cote de X..."
+   - La mention des outsiders dangereux (2-3 chevaux)
+   - L'impact des conditions (terrain, distance, discipline) sur les chances
 2. Une fiche détaillée pour CHAQUE cheval (3-4 phrases minimum par cheval)
 3. Un classement Top 5 logique basé sur les données réelles
 4. Des sélections cohérentes : Gagnant, Couplé, Quarté, Quinté si applicable, 2sur4 si 10+ partants
@@ -1704,11 +1715,11 @@ ${horsesData}
 
 Réponds UNIQUEMENT en JSON valide (numéros disponibles: ${actifs.map(p=>p.numPmu).join(', ')}):
 {
-  "texte": "Présentation experte de la course en ${langue} (5-8 lignes minimum)",
+  "texte": "Présentation de '${course.nom}' à ${hippo}. Commence par une analyse du favori: 'N°${favoriNum} ${nomFavori} avec ${driverFavori} est le favori logique avec une cote de ${coteFavori}...'. Mentionne les outsiders dangereux${outsiders ? ' (notamment '+outsiders+')' : ''}. Impact du terrain ${terrain} sur les chances. 5-8 lignes en ${langue}.",
   "favori": ${favoriNum},
   "top5": [${favoriNum}, num2, num3, num4, num5],
   "analyses": {
-${actifs.map(p=>`    "${p.numPmu}": "Analyse experte 3-4 phrases de N°${p.numPmu} ${p.nom}"`).join(',\n')}
+${actifs.map(p=>`    "${p.numPmu}": "Analyse experte 3-4 phrases de N°${p.numPmu} ${p.nom} (driver: ${p.driver||'?'})"`).join(',\n')}
   },
   "gagnant": ${favoriNum},
   "couple": [${favoriNum}, num2],
@@ -1720,7 +1731,7 @@ ${deux_sur_4Line}${quarteRapportLines}  }
 }`;
 
   const callClaude = async (sysprompt, userprompt) => {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    const resp = await fetch("/api/ai", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({
@@ -1731,7 +1742,7 @@ ${deux_sur_4Line}${quarteRapportLines}  }
       })
     });
     const data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const txt = data.content.filter(b=>b.type==="text").map(b=>b.text).join('');
     let parsed = null;
     try { parsed = JSON.parse(txt.trim()); } catch(_) {}
@@ -1844,7 +1855,7 @@ ${deux_sur_4Line}${quarteRapportLines}  }
       if (n >= 10) rpts['2_sur_4'] = '8x';
     }
     result.rapports = rpts;
-    result.analyse = '';
+    result.analyse = result.texte || '';
 
     cache[key] = result;
     render(result, isQ);
@@ -2034,7 +2045,16 @@ function render(data, isQ) {
     </div>`).join('');
 
   // ── Analyse générale ──
-  document.getElementById('analyseCard').textContent = data.analyse || '';
+  const analyseEl = document.getElementById('analyseCard');
+  const analyseLabel = analyseEl.previousElementSibling;
+  if (data.analyse) {
+    const safe = data.analyse.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    analyseEl.innerHTML = safe.replace(/\n/g,'<br>');
+    if (analyseLabel?.classList.contains('block-label')) analyseLabel.style.display = '';
+  } else {
+    analyseEl.innerHTML = '';
+    if (analyseLabel?.classList.contains('block-label')) analyseLabel.style.display = 'none';
+  }
 
   // ── Conditions du jour ──
   const condEl = document.getElementById('conditionsBlock');
