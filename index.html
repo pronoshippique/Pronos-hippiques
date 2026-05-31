@@ -1784,12 +1784,12 @@ Réponds UNIQUEMENT en JSON valide (numéros disponibles: ${actifs.map(p=>p.numP
 {
   "texte": "Présentation de '${course.nom}' à ${hippo}. Commence par le favori: 'N°${favoriNum} ${nomFavori} avec ${driverFavori} : ${favoriFormeStr}...'. Mentionne les outsiders dangereux${outsiders ? ' (notamment '+outsiders+')' : ''}. Impact du terrain ${terrain} sur les chances. 5-8 lignes en ${langue}.",
   "favori": ${favoriNum},
-  "top5": [${favoriNum}, num2, num3, num4, num5],
+  "top5": [${sorted.slice(0,5).map(p=>p.numPmu).join(', ')}],
   "analyses": {
 ${sorted.map(p=>{const f=formeMap[p.numPmu];const ms=p.musique?`Musique ${f.summary} (score ${f.score}/10, ${f.label}).`:'Musique indisponible.';return`    "${p.numPmu}": "${p.nom} (${p.driver||'?'}) : ${ms} 3-4 phrases d'analyse experte. Verdict: FAVORI LOGIQUE / OUTSIDER DANGEREUX / RÉGULIER / IRRÉGULIER / À ÉVITER."`;}).join(',\n')}
   },
   "gagnant": ${favoriNum},
-  "couple": [${favoriNum}, num2],
+  "couple": [${sorted[0]?.numPmu||0}, ${sorted[1]?.numPmu||0}],
 ${quinteBlock}  "rapports": {
 ${rapportsContent}
   }
