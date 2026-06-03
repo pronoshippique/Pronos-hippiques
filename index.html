@@ -1800,7 +1800,7 @@ ${rapportsContent}
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        partants: actifs.map(p => ({ numero: p.numPmu, nom: p.nom, driver: p.driver||'?', musique: p.musique||'NC' })),
+        partants: actifs.map(p => ({ numero: p.numPmu, nom: p.nom, driver: p.driver||'?', musique: p.musique||'NC', indiceCote: p.indiceCote || null })),
         course: {
           nom: course.nom,
           hippodrome: hippo,
