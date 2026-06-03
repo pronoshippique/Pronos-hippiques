@@ -168,7 +168,15 @@ ${rapportItems.join(',\n')}
   }
 }`;
 
+    const anthropicPayload = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }]
+    };
+
     console.log('ai.js — course:', nomCourse, '| partants:', n, '| isQuinte:', isQuinte, '| langue:', langue);
+    console.log('ai.js — payload meta: model=', anthropicPayload.model, '| max_tokens=', anthropicPayload.max_tokens, '| system_len=', systemPrompt.length, '| user_len=', userPrompt.length);
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -177,19 +185,18 @@ ${rapportItems.join(',\n')}
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }]
-      }),
+      body: JSON.stringify(anthropicPayload),
       signal: AbortSignal.timeout(55000)
     });
 
     const text = await resp.text();
-    console.log('ANTHROPIC STATUS:', resp.status, 'RESPONSE:', text.substring(0, 300));
+    if (resp.status !== 200) {
+      console.error('ANTHROPIC ERROR', resp.status, '— FULL RESPONSE:', text);
+    } else {
+      console.log('ANTHROPIC STATUS:', resp.status, 'RESPONSE:', text.substring(0, 300));
+    }
     try { return res.status(resp.status).json(JSON.parse(text)); }
-    catch (e) { return res.status(500).json({ error: 'bad json', raw: text.substring(0, 200) }); }
+    catch (e) { return res.status(500).json({ error: 'bad json', raw: text.substring(0, 500) }); }
 
   } catch (e) {
     console.log('ERROR:', e.message);
