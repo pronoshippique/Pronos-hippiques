@@ -170,13 +170,13 @@ ${rapportItems.join(',\n')}
 
     const anthropicPayload = {
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 8192,  // 4096 insuffisant pour 16-18 partants (besoin de ~4500-5500 tokens)
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }]
     };
 
     console.log('ai.js — course:', nomCourse, '| partants:', n, '| isQuinte:', isQuinte, '| langue:', langue);
-    console.log('ai.js — payload meta: model=', anthropicPayload.model, '| max_tokens=', anthropicPayload.max_tokens, '| system_len=', systemPrompt.length, '| user_len=', userPrompt.length);
+    console.log('ai.js — payload: max_tokens=', anthropicPayload.max_tokens, '| system_len=', systemPrompt.length, '| user_len=', userPrompt.length);
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -186,20 +186,40 @@ ${rapportItems.join(',\n')}
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(anthropicPayload),
-      signal: AbortSignal.timeout(55000)
+      signal: AbortSignal.timeout(58000)  // 55000 → 58000 : marge max avant maxDuration Vercel (60s)
     });
 
     const text = await resp.text();
-    if (resp.status !== 200) {
-      console.error('ANTHROPIC ERROR', resp.status, '— FULL RESPONSE:', text);
-    } else {
-      console.log('ANTHROPIC STATUS:', resp.status, 'RESPONSE:', text.substring(0, 300));
+
+    // Étape 1 : parser l'enveloppe Anthropic (distinct du JSON pronostics à l'intérieur)
+    let anthropicData;
+    try {
+      anthropicData = JSON.parse(text);
+    } catch (parseErr) {
+      console.error('ANTHROPIC BODY NON-JSON — status:', resp.status, '— raw:', text.substring(0, 2000));
+      return res.status(502).json({ error: 'Réponse Anthropic non-JSON', status: resp.status });
     }
-    try { return res.status(resp.status).json(JSON.parse(text)); }
-    catch (e) { return res.status(500).json({ error: 'bad json', raw: text.substring(0, 500) }); }
+
+    if (resp.status !== 200) {
+      console.error('ANTHROPIC ERROR', resp.status, '—', JSON.stringify(anthropicData).substring(0, 500));
+      return res.status(resp.status).json(anthropicData);
+    }
+
+    // Étape 2 : vérifier stop_reason — 'max_tokens' indique une troncature du JSON pronostics
+    const stopReason = anthropicData.stop_reason;
+    const usage = anthropicData.usage || {};
+    console.log('ai.js — stop_reason:', stopReason, '| tokens in:', usage.input_tokens, 'out:', usage.output_tokens);
+
+    if (stopReason === 'max_tokens') {
+      const tail = anthropicData.content?.[0]?.text?.slice(-400) || '';
+      console.error('TRONCATURE stop_reason=max_tokens | partants=', n, '| out_tokens=', usage.output_tokens, '| fin JSON:', tail);
+    }
+
+    return res.status(200).json(anthropicData);
 
   } catch (e) {
-    console.log('ERROR:', e.message);
-    return res.status(500).json({ error: e.message });
+    const isTimeout = e.name === 'AbortError' || e.name === 'TimeoutError';
+    console.error('ai.js', isTimeout ? 'TIMEOUT' : 'ERREUR', '(partants=' + n + ', isQuinte=' + isQuinte + '):', e.message);
+    return res.status(500).json({ error: isTimeout ? 'Timeout IA (' + n + ' partants)' : e.message });
   }
 }
