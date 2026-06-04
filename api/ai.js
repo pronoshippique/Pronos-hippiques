@@ -87,6 +87,9 @@ export default async function handler(req, res) {
       return `N°${p.numero} ${p.nom} (${p.driver || '?'}${coteStr}${formeLabel})`;
     }).join(' et ');
 
+    // Échappe " et \ dans les chaînes insérées dans les templates JSON du prompt
+    const esc = s => String(s || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
     // ── Bloc de données chevaux ──
     const horsesData = sorted.map(p => {
       const coteStr = getCote(p) ? getCote(p).toFixed(1) : 'NC';
@@ -94,7 +97,7 @@ export default async function handler(req, res) {
       const formeStr = (p.musique && p.musique !== 'NC')
         ? `${forme.summary} → score:${forme.score}/10 (${forme.label})`
         : 'NC';
-      return `N°${p.numero} ${p.nom} | Driver: ${p.driver || '?'} | Cote: ${coteStr} | Musique: ${formeStr}`;
+      return `N°${p.numero} ${esc(p.nom)} | Driver: ${esc(p.driver) || '?'} | Cote: ${coteStr} | Musique: ${formeStr}`;
     }).join('\n');
 
     // ── Template JSON attendu par le front ──
@@ -110,7 +113,7 @@ export default async function handler(req, res) {
       const ms = (p.musique && p.musique !== 'NC')
         ? `Musique ${f.summary} (score ${f.score}/10, ${f.label}).`
         : 'Musique indisponible.';
-      return `    "${p.numero}": "${p.nom} (${p.driver || '?'}) : ${ms} 3-4 phrases d'analyse experte. Verdict: FAVORI LOGIQUE / OUTSIDER DANGEREUX / RÉGULIER / IRRÉGULIER / À ÉVITER."`;
+      return `    "${p.numero}": "${esc(p.nom)} (${esc(p.driver) || '?'}) : ${ms} 3-4 phrases d'analyse experte. Verdict: FAVORI LOGIQUE / OUTSIDER DANGEREUX / RÉGULIER / IRRÉGULIER / À ÉVITER."`;
     }).join(',\n');
 
     const terrain = course.terrain || 'Bon';
@@ -155,7 +158,7 @@ IMPORTANT : Le champ de présentation doit s'appeler EXACTEMENT 'texte' (pas 'pr
 
 Réponds UNIQUEMENT en JSON valide (numéros disponibles: ${sorted.map(p => p.numero).join(', ')}):
 {
-  "texte": "Présentation de '${nomCourse}' à ${hippo}. Commence par le favori: 'N°${favoriNum} ${favori.nom} avec ${favori.driver || '?'} : ${favoriFormeStr}...'. Mentionne les outsiders dangereux${outsiders ? ' (notamment ' + outsiders + ')' : ''}. Impact du terrain ${terrain} sur les chances. 5-8 lignes en ${langue}.",
+  "texte": "Présentation de '${esc(nomCourse)}' à ${esc(hippo)}. Commence par le favori: 'N°${favoriNum} ${esc(favori.nom)} avec ${esc(favori.driver) || '?'} : ${favoriFormeStr}...'. Mentionne les outsiders dangereux${outsiders ? ' (notamment ' + outsiders + ')' : ''}. Impact du terrain ${terrain} sur les chances. 5-8 lignes en ${langue}.",
   "favori": ${favoriNum},
   "top5": [${sorted.slice(0, 5).map(p => p.numero).join(', ')}],
   "analyses": {
