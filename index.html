@@ -1309,7 +1309,6 @@ async function loadProgramme() {
   REUNIONS = getProgrammeFallback();
   buildTabs(); buildNav();
   selectReunion(REUNIONS[0].id);
-  setTimeout(() => selectCourse(REUNIONS[0].id, "C1"), 100);
   document.getElementById('programmeLoading').style.display = 'none';
 
   try {
@@ -1626,8 +1625,7 @@ async function generate(course, key) {
   const nonPart = allPartants.filter(p=>p.nonPartant);
 
   if (!actifs.length) {
-    const fb = fallback(n, isQ, course.partantsData, cotes);
-    cache[key] = fb; render(fb, isQ); return;
+    render(fallback(n, isQ, course.partantsData, cotes), isQ); return;
   }
 
   const getCote = (p) => {
